@@ -37,6 +37,7 @@ export function useBroadcastSocket(
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messageQueueRef = useRef<SendMessage[]>([]);
   const pendingMessagesRef = useRef<Map<string, (response: any) => void>>(new Map());
+  const messageListenersRef = useRef<Set<(message: BroadcastMessage) => void>>(new Set());
 
   const log = useCallback((message: string, ...args: any[]) => {
     if (config.debug) {
@@ -235,7 +236,23 @@ export function useBroadcastSocket(
         pendingMessagesRef.current.delete(message.messageId);
       }
     }
+
+    messageListenersRef.current.forEach(listener => {
+      try {
+        listener(message);
+      } catch (error) {
+        log('Error in message listener:', error);
+      }
+    });
   }, [log]);
+
+  const addMessageListener = useCallback((listener: (message: BroadcastMessage) => void): (() => void) => {
+    messageListenersRef.current.add(listener);
+    
+    return () => {
+      messageListenersRef.current.delete(listener);
+    };
+  }, []);
 
 
 
@@ -271,7 +288,8 @@ export function useBroadcastSocket(
     unsubscribe,
     broadcast,
     disconnect,
-    reconnect
+    reconnect,
+    addMessageListener
   };
 }
 
@@ -339,7 +357,7 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
 
   useEffect(() => {
     const handleMessage = (message: BroadcastMessage) => {
-      if (message.channel === channel) {
+      if (message.channel === channel && message.type === 'message') {
         setMessages(prev => [...prev, message].slice(-100));
         setSubscriptionState(prev => ({
           ...prev,
@@ -349,13 +367,10 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
       }
     };
 
-    // Note: In a real implementation, you'd need to add message listener to context
-    // This is a simplified version for demonstration
+    const removeListener = context.addMessageListener(handleMessage);
 
-    return () => {
-      // Cleanup message listener
-    };
-  }, [channel]);
+    return removeListener;
+  }, [channel, context]);
 
   return {
     state: subscriptionState,

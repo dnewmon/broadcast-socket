@@ -24,7 +24,8 @@ export function BroadcastProvider({
     send, 
     subscribe, 
     unsubscribe, 
-    broadcast 
+    broadcast,
+    addMessageListener
   } = useBroadcastSocket(url, options);
 
   const contextValue: BroadcastContextValue = {
@@ -33,7 +34,8 @@ export function BroadcastProvider({
     subscribe,
     unsubscribe,
     broadcast,
-    send
+    send,
+    addMessageListener
   };
 
   return React.createElement(
