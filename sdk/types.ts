@@ -56,6 +56,7 @@ export interface SubscriptionHookReturn {
   subscribe: () => Promise<void>;
   unsubscribe: () => Promise<void>;
   clearMessages: () => void;
+  addMessageListener: (listener: (message: BroadcastMessage) => void) => () => void;
 }
 
 export interface BroadcastContextValue {

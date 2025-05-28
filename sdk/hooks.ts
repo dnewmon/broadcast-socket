@@ -310,6 +310,7 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
   });
 
   const [messages, setMessages] = useState<BroadcastMessage[]>([]);
+  const channelListenersRef = useRef<Set<(message: BroadcastMessage) => void>>(new Set());
 
   const subscribe = useCallback(async () => {
     setSubscriptionState((prev: SubscriptionState) => ({ ...prev, subscribing: true, error: null }));
@@ -355,6 +356,14 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
     }));
   }, []);
 
+  const addMessageListener = useCallback((listener: (message: BroadcastMessage) => void): (() => void) => {
+    channelListenersRef.current.add(listener);
+    
+    return () => {
+      channelListenersRef.current.delete(listener);
+    };
+  }, []);
+
   useEffect(() => {
     const handleMessage = (message: BroadcastMessage) => {
       if (message.channel === channel && message.type === 'message') {
@@ -364,6 +373,14 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
           messageCount: prev.messageCount + 1,
           lastMessage: Date.now()
         }));
+
+        channelListenersRef.current.forEach((listener: (message: BroadcastMessage) => void) => {
+          try {
+            listener(message);
+          } catch (error) {
+            console.error('Error in channel message listener:', error);
+          }
+        });
       }
     };
 
@@ -377,7 +394,8 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
     messages,
     subscribe,
     unsubscribe,
-    clearMessages
+    clearMessages,
+    addMessageListener
   };
 }
 

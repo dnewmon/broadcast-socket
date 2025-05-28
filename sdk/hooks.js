@@ -258,6 +258,7 @@ function useSubscription(channel) {
         lastMessage: null
     });
     const [messages, setMessages] = (0, react_1.useState)([]);
+    const channelListenersRef = (0, react_1.useRef)(new Set());
     const subscribe = (0, react_1.useCallback)(async () => {
         setSubscriptionState((prev) => ({ ...prev, subscribing: true, error: null }));
         try {
@@ -300,6 +301,12 @@ function useSubscription(channel) {
             lastMessage: null
         }));
     }, []);
+    const addMessageListener = (0, react_1.useCallback)((listener) => {
+        channelListenersRef.current.add(listener);
+        return () => {
+            channelListenersRef.current.delete(listener);
+        };
+    }, []);
     (0, react_1.useEffect)(() => {
         const handleMessage = (message) => {
             if (message.channel === channel && message.type === 'message') {
@@ -309,6 +316,14 @@ function useSubscription(channel) {
                     messageCount: prev.messageCount + 1,
                     lastMessage: Date.now()
                 }));
+                channelListenersRef.current.forEach((listener) => {
+                    try {
+                        listener(message);
+                    }
+                    catch (error) {
+                        console.error('Error in channel message listener:', error);
+                    }
+                });
             }
         };
         const removeListener = context.addMessageListener(handleMessage);
@@ -319,7 +334,8 @@ function useSubscription(channel) {
         messages,
         subscribe,
         unsubscribe,
-        clearMessages
+        clearMessages,
+        addMessageListener
     };
 }
 function useBroadcast() {
