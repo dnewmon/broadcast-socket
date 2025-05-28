@@ -122,10 +122,25 @@ function ChatComponent() {
   const { state } = useBroadcastSocket('ws://localhost:8080');
   
   // Subscribe to a channel
-  const { state: subState, messages } = useSubscription('chat-room');
+  const { state: subState, messages, subscribe, addMessageListener } = useSubscription('chat-room');
   
   // Broadcasting capabilities
   const { broadcast } = useBroadcast();
+  
+  // Subscribe to the channel
+  useEffect(() => {
+    subscribe();
+  }, [subscribe]);
+  
+  // Listen for incoming messages with custom handler
+  useEffect(() => {
+    const removeListener = addMessageListener((message) => {
+      console.log('New message received:', message.data);
+      // Custom message handling logic here
+    });
+    
+    return removeListener; // Cleanup listener on unmount
+  }, [addMessageListener]);
   
   const sendMessage = () => {
     broadcast('chat-room', { text: 'Hello World!' });
@@ -137,6 +152,128 @@ function ChatComponent() {
       <div>Subscribed: {subState.subscribed ? 'Yes' : 'No'}</div>
       <div>Messages: {messages.length}</div>
       <button onClick={sendMessage}>Send Message</button>
+    </div>
+  );
+}
+```
+
+### useSubscription Hook API
+
+The `useSubscription` hook provides channel-specific subscription management with message handling capabilities.
+
+#### Basic Usage
+
+```typescript
+import { useSubscription } from 'broadcast-socket';
+
+function ChannelComponent() {
+  const { 
+    state, 
+    messages, 
+    subscribe, 
+    unsubscribe, 
+    clearMessages, 
+    addMessageListener 
+  } = useSubscription('my-channel');
+  
+  // Automatically subscribe when component mounts
+  useEffect(() => {
+    subscribe();
+    return () => unsubscribe(); // Clean up on unmount
+  }, [subscribe, unsubscribe]);
+  
+  return (
+    <div>
+      <div>Channel: {state.channel}</div>
+      <div>Subscribed: {state.subscribed ? 'Yes' : 'No'}</div>
+      <div>Message Count: {state.messageCount}</div>
+      <div>Recent Messages: {messages.length}</div>
+    </div>
+  );
+}
+```
+
+#### Return Values
+
+- **`state`**: Subscription state object containing:
+  - `channel` - The channel name
+  - `subscribed` - Whether actively subscribed
+  - `subscribing` - Whether subscription is in progress
+  - `error` - Any subscription error message
+  - `messageCount` - Total messages received
+  - `lastMessage` - Timestamp of last message
+  
+- **`messages`**: Array of recent messages (last 100)
+- **`subscribe()`**: Function to subscribe to the channel
+- **`unsubscribe()`**: Function to unsubscribe from channel
+- **`clearMessages()`**: Function to clear message history
+- **`addMessageListener(callback)`**: Function to add custom message handlers
+
+#### Custom Message Handling
+
+```typescript
+function CustomHandlerComponent() {
+  const { addMessageListener, subscribe } = useSubscription('notifications');
+  
+  useEffect(() => {
+    subscribe();
+  }, [subscribe]);
+  
+  // Add custom message listener
+  useEffect(() => {
+    const removeListener = addMessageListener((message) => {
+      // Handle different message types
+      if (message.data?.type === 'alert') {
+        showNotification(message.data.text);
+      } else if (message.data?.type === 'update') {
+        updateUI(message.data.payload);
+      }
+    });
+    
+    // Clean up listener when component unmounts
+    return removeListener;
+  }, [addMessageListener]);
+  
+  return <div>Listening for notifications...</div>;
+}
+```
+
+#### Multiple Subscriptions
+
+```typescript
+function MultiChannelComponent() {
+  const chatSub = useSubscription('chat');
+  const alertSub = useSubscription('alerts');
+  const userSub = useSubscription('user-updates');
+  
+  useEffect(() => {
+    // Subscribe to all channels
+    chatSub.subscribe();
+    alertSub.subscribe();
+    userSub.subscribe();
+  }, []);
+  
+  // Different handlers for each channel
+  useEffect(() => {
+    const removeChatListener = chatSub.addMessageListener((msg) => {
+      console.log('Chat message:', msg.data);
+    });
+    
+    const removeAlertListener = alertSub.addMessageListener((msg) => {
+      showAlert(msg.data);
+    });
+    
+    return () => {
+      removeChatListener();
+      removeAlertListener();
+    };
+  }, [chatSub.addMessageListener, alertSub.addMessageListener]);
+  
+  return (
+    <div>
+      <div>Chat Messages: {chatSub.messages.length}</div>
+      <div>Alerts: {alertSub.messages.length}</div>
+      <div>User Updates: {userSub.messages.length}</div>
     </div>
   );
 }
