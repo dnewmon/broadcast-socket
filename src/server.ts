@@ -85,6 +85,8 @@ export class BroadcastServer {
       const clientId = generateClientId();
       const clientIp = req.socket.remoteAddress || 'unknown';
       
+      logWithTimestamp('debug', `[SERVER] New WebSocket connection attempt from ${clientIp}`);
+      
       if (!this.rateLimiter(clientIp)) {
         logWithTimestamp('warn', `Rate limit exceeded for IP: ${clientIp}`);
         ws.close(1008, 'Rate limit exceeded');
@@ -100,12 +102,14 @@ export class BroadcastServer {
       };
 
       this.clients.set(clientId, client);
-      logWithTimestamp('info', `Client connected: ${clientId} from ${clientIp}`);
+      logWithTimestamp('info', `[SERVER] Client connected: ${clientId} from ${clientIp}`);
+      logWithTimestamp('debug', `[SERVER] Total connected clients: ${this.clients.size}`);
 
       this.sendWelcomeMessage(client);
       this.restoreClientSubscriptions(clientId);
 
       ws.on('message', async (data: WebSocket.RawData) => {
+        logWithTimestamp('debug', `[SERVER] Received message from client ${clientId}: ${data.toString()}`);
         await this.handleClientMessage(client, data);
       });
 
@@ -115,6 +119,7 @@ export class BroadcastServer {
       });
 
       ws.on('close', (code: number, reason: Buffer) => {
+        logWithTimestamp('debug', `[SERVER] Client ${clientId} connection closed with code ${code}`);
         this.handleClientDisconnect(clientId, code, reason);
       });
 
@@ -159,17 +164,22 @@ export class BroadcastServer {
 
   private async handleSubscribe(client: Client, message: ClientMessage): Promise<void> {
     if (!message.channel) {
+      logWithTimestamp('error', `[SERVER] Subscribe failed for client ${client.id}: no channel specified`);
       this.sendErrorMessage(client, 'Channel is required for subscription');
       return;
     }
 
+    logWithTimestamp('debug', `[SERVER] Processing subscription for client ${client.id} to channel: ${message.channel}`);
     const subscribed = await this.subscriptionManager.subscribeClient(client.id, message.channel);
     
     if (subscribed) {
       client.subscriptions.add(message.channel);
-      logWithTimestamp('info', `Client ${client.id} subscribed to channel: ${message.channel}`);
+      logWithTimestamp('info', `[SERVER] Client ${client.id} subscribed to channel: ${message.channel}`);
+      logWithTimestamp('debug', `[SERVER] Client ${client.id} now has ${client.subscriptions.size} subscriptions: [${Array.from(client.subscriptions).join(', ')}]`);
       
       await this.broadcastManager.deliverQueuedMessages(client.id);
+    } else {
+      logWithTimestamp('warn', `[SERVER] Client ${client.id} was already subscribed to channel: ${message.channel}`);
     }
 
     this.sendAckMessage(client, message.messageId);
@@ -195,13 +205,16 @@ export class BroadcastServer {
     const channel = message.channel || '*';
     const data = sanitizeData(message.data);
 
+    logWithTimestamp('debug', `[SERVER] Processing broadcast from client ${client.id} to channel: ${channel}`);
+    logWithTimestamp('debug', `[SERVER] Broadcast data:`, data);
+
     try {
       const messageId = await this.broadcastManager.broadcastToChannel(channel, data, client.id);
       this.sendAckMessage(client, message.messageId, messageId);
       
-      logWithTimestamp('info', `Client ${client.id} broadcast to channel: ${channel}`);
+      logWithTimestamp('info', `[SERVER] Client ${client.id} broadcast to channel: ${channel} with messageId: ${messageId}`);
     } catch (error) {
-      logWithTimestamp('error', `Broadcast error for client ${client.id}:`, error);
+      logWithTimestamp('error', `[SERVER] Broadcast error for client ${client.id}:`, error);
       this.sendErrorMessage(client, 'Failed to broadcast message');
     }
   }
@@ -244,10 +257,14 @@ export class BroadcastServer {
   private sendMessage(client: Client, message: ServerMessage): void {
     try {
       if (client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(JSON.stringify(message));
+        const messageStr = JSON.stringify(message);
+        logWithTimestamp('debug', `[SERVER] Sending message to client ${client.id}: ${messageStr}`);
+        client.ws.send(messageStr);
+      } else {
+        logWithTimestamp('warn', `[SERVER] Cannot send message to client ${client.id}: WebSocket not open (state: ${client.ws.readyState})`);
       }
     } catch (error) {
-      logWithTimestamp('error', `Error sending message to client ${client.id}:`, error);
+      logWithTimestamp('error', `[SERVER] Error sending message to client ${client.id}:`, error);
     }
   }
 

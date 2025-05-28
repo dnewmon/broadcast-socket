@@ -18,12 +18,15 @@ export class BroadcastManager {
   }
 
   private setupRedisSubscriptions(): void {
+    console.log('[BROADCAST] Setting up Redis subscriptions for broadcast:* pattern');
     this.redis.subscribeToChannel('broadcast:*', (message: string) => {
       try {
+        console.log('[BROADCAST] Received Redis message:', message);
         const broadcastMessage: BroadcastMessage = JSON.parse(message);
+        console.log('[BROADCAST] Parsed broadcast message:', broadcastMessage);
         this.handleIncomingBroadcast(broadcastMessage);
       } catch (error) {
-        console.error('Error parsing broadcast message:', error);
+        console.error('[BROADCAST] Error parsing broadcast message:', error);
       }
     });
   }
@@ -31,6 +34,9 @@ export class BroadcastManager {
   async broadcastToChannel(channel: string, data: any, senderId?: string): Promise<string> {
     const messageId = uuidv4();
     const timestamp = Date.now();
+
+    console.log(`[BROADCAST] Broadcasting to channel: ${channel}, messageId: ${messageId}, senderId: ${senderId}`);
+    console.log(`[BROADCAST] Broadcast data:`, data);
 
     const broadcastMessage: BroadcastMessage = {
       channel,
@@ -40,12 +46,16 @@ export class BroadcastManager {
       senderId
     };
 
+    console.log(`[BROADCAST] Storing message in Redis: ${messageId}`);
     await this.redis.storeMessage(messageId, broadcastMessage);
+    
+    console.log(`[BROADCAST] Publishing to Redis channel: broadcast:${channel}`);
     await this.redis.publishMessage(`broadcast:${channel}`, broadcastMessage);
 
     await this.redis.incrementCounter('stats:total_messages');
     await this.redis.incrementCounter(`stats:channel:${channel}:messages`);
 
+    console.log(`[BROADCAST] Successfully broadcast message ${messageId} to channel ${channel}`);
     return messageId;
   }
 
@@ -54,7 +64,10 @@ export class BroadcastManager {
   }
 
   private async handleIncomingBroadcast(broadcastMessage: BroadcastMessage): Promise<void> {
+    console.log(`[BROADCAST] Handling incoming broadcast: ${broadcastMessage.messageId} for channel: ${broadcastMessage.channel}`);
+    
     if (this.deduplicationCache.has(broadcastMessage.messageId)) {
+      console.log(`[BROADCAST] Message ${broadcastMessage.messageId} already processed (deduplication)`);
       return;
     }
 
@@ -64,10 +77,13 @@ export class BroadcastManager {
     }, 60000);
 
     const { channel, data, messageId, timestamp, senderId } = broadcastMessage;
+    console.log(`[BROADCAST] Processing message ${messageId} from sender ${senderId} for channel ${channel}`);
 
     if (channel === '*') {
+      console.log(`[BROADCAST] Delivering to all clients (global broadcast)`);
       await this.deliverToAllClients(data, messageId, timestamp, senderId);
     } else {
+      console.log(`[BROADCAST] Delivering to channel subscribers: ${channel}`);
       await this.deliverToChannelSubscribers(channel, data, messageId, timestamp, senderId);
     }
   }
@@ -80,6 +96,7 @@ export class BroadcastManager {
     senderId?: string
   ): Promise<void> {
     const subscribers = this.subscriptionManager.getChannelSubscribers(channel);
+    console.log(`[BROADCAST] Channel ${channel} has ${subscribers.length} subscribers: [${subscribers.join(', ')}]`);
     
     const serverMessage: ServerMessage = {
       type: 'message',
@@ -89,11 +106,14 @@ export class BroadcastManager {
       timestamp
     };
 
-    const deliveryPromises = subscribers
-      .filter(clientId => clientId !== senderId)
-      .map(clientId => this.deliverToClient(clientId, serverMessage));
+    const targetClients = subscribers.filter(clientId => clientId !== senderId);
+    console.log(`[BROADCAST] Delivering to ${targetClients.length} clients (excluding sender ${senderId}): [${targetClients.join(', ')}]`);
 
-    await Promise.allSettled(deliveryPromises);
+    const deliveryPromises = targetClients.map(clientId => this.deliverToClient(clientId, serverMessage));
+
+    const results = await Promise.allSettled(deliveryPromises);
+    const failures = results.filter(r => r.status === 'rejected').length;
+    console.log(`[BROADCAST] Delivery completed for channel ${channel}: ${results.length - failures}/${results.length} successful`);
   }
 
   private async deliverToAllClients(
@@ -118,9 +138,22 @@ export class BroadcastManager {
   }
 
   private async deliverToClient(clientId: string, message: ServerMessage): Promise<void> {
+    console.log(`[BROADCAST] Attempting to deliver message ${message.messageId} to client ${clientId}`);
     const client = this.clients.get(clientId);
     
-    if (!client || !client.isAlive) {
+    if (!client) {
+      console.log(`[BROADCAST] Client ${clientId} not found in clients map, queueing message`);
+      this.queueMessage(clientId, {
+        channel: message.channel || '',
+        data: message.data,
+        messageId: message.messageId || '',
+        timestamp: message.timestamp
+      });
+      return;
+    }
+
+    if (!client.isAlive) {
+      console.log(`[BROADCAST] Client ${clientId} is not alive, queueing message`);
       this.queueMessage(clientId, {
         channel: message.channel || '',
         data: message.data,
@@ -132,9 +165,12 @@ export class BroadcastManager {
 
     try {
       if (client.ws.readyState === 1) {
+        console.log(`[BROADCAST] Sending message ${message.messageId} to client ${clientId}`);
         client.ws.send(JSON.stringify(message));
+        console.log(`[BROADCAST] Message ${message.messageId} sent successfully to client ${clientId}`);
         await this.sendAcknowledgment(client, message.messageId);
       } else {
+        console.log(`[BROADCAST] Client ${clientId} WebSocket not ready (state: ${client.ws.readyState}), queueing message`);
         this.queueMessage(clientId, {
           channel: message.channel || '',
           data: message.data,
@@ -143,7 +179,7 @@ export class BroadcastManager {
         });
       }
     } catch (error) {
-      console.error(`Error delivering message to client ${clientId}:`, error);
+      console.error(`[BROADCAST] Error delivering message to client ${clientId}:`, error);
       this.queueMessage(clientId, {
         channel: message.channel || '',
         data: message.data,
@@ -172,6 +208,8 @@ export class BroadcastManager {
   }
 
   private queueMessage(clientId: string, message: BroadcastMessage): void {
+    console.log(`[BROADCAST] Queueing message ${message.messageId} for client ${clientId}`);
+    
     if (!this.messageQueue.has(clientId)) {
       this.messageQueue.set(clientId, []);
     }
@@ -180,8 +218,11 @@ export class BroadcastManager {
     queue.push(message);
 
     if (queue.length > 100) {
-      queue.shift();
+      const dropped = queue.shift();
+      console.log(`[BROADCAST] Queue full for client ${clientId}, dropped message ${dropped?.messageId}`);
     }
+    
+    console.log(`[BROADCAST] Client ${clientId} now has ${queue.length} queued messages`);
   }
 
   async deliverQueuedMessages(clientId: string): Promise<void> {
