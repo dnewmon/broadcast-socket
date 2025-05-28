@@ -1,0 +1,52 @@
+{
+  "name": "broadcast-socket",
+  "version": "1.0.0",
+  "description": "A horizontally scalable WebSocket broadcasting service",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "websocket",
+    "broadcasting",
+    "scalable",
+    "redis",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "redis": "^5.1.1",
+    "uuid": "^11.1.0",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/cors": "^2.8.13",
+    "@types/express": "^5.0.2",
+    "@types/jest": "^29.5.5",
+    "@types/node": "^22.15.23",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.5",
+    "@typescript-eslint/eslint-plugin": "^8.33.0",
+    "@typescript-eslint/parser": "^8.33.0",
+    "eslint": "^9.27.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.0.0-beta.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

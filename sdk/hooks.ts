@@ -1,0 +1,379 @@
+import { useState, useEffect, useRef, useCallback, useContext } from 'react';
+import { 
+  BroadcastSocketOptions, 
+  BroadcastSocketState, 
+  BroadcastMessage, 
+  SendMessage,
+  BroadcastHookReturn,
+  SubscriptionHookReturn,
+  SubscriptionState 
+} from './types';
+import { BroadcastContext } from './context';
+
+const DEFAULT_OPTIONS: Required<BroadcastSocketOptions> = {
+  reconnect: true,
+  reconnectAttempts: 5,
+  reconnectInterval: 1000,
+  heartbeatInterval: 30000,
+  messageQueueSize: 100,
+  debug: false
+};
+
+export function useBroadcastSocket(
+  url: string, 
+  options: BroadcastSocketOptions = {}
+): BroadcastHookReturn {
+  const config = { ...DEFAULT_OPTIONS, ...options };
+  const [state, setState] = useState<BroadcastSocketState>({
+    connected: false,
+    connecting: false,
+    error: null,
+    reconnectAttempt: 0,
+    lastConnected: null
+  });
+
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const messageQueueRef = useRef<SendMessage[]>([]);
+  const pendingMessagesRef = useRef<Map<string, (response: any) => void>>(new Map());
+
+  const log = useCallback((message: string, ...args: any[]) => {
+    if (config.debug) {
+      console.log(`[BroadcastSocket] ${message}`, ...args);
+    }
+  }, [config.debug]);
+
+  const generateMessageId = useCallback(() => {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }, []);
+
+  const connect = useCallback(() => {
+    if (state.connecting || state.connected) {
+      return;
+    }
+
+    setState(prev => ({ ...prev, connecting: true, error: null }));
+    log('Connecting to', url);
+
+    try {
+      const socket = new WebSocket(url);
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        log('Connected');
+        setState(prev => ({
+          ...prev,
+          connected: true,
+          connecting: false,
+          error: null,
+          reconnectAttempt: 0,
+          lastConnected: Date.now()
+        }));
+
+        flushMessageQueue();
+        setupHeartbeat();
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const message: BroadcastMessage = JSON.parse(event.data);
+          handleMessage(message);
+        } catch (error) {
+          log('Error parsing message:', error);
+        }
+      };
+
+      socket.onclose = (event) => {
+        log('Disconnected', event.code, event.reason);
+        cleanup();
+        
+        setState(prev => ({
+          ...prev,
+          connected: false,
+          connecting: false,
+          error: event.reason || 'Connection closed'
+        }));
+
+        if (config.reconnect && state.reconnectAttempt < config.reconnectAttempts) {
+          scheduleReconnect();
+        }
+      };
+
+      socket.onerror = (error) => {
+        log('WebSocket error:', error);
+        setState(prev => ({ ...prev, error: 'Connection error' }));
+      };
+
+    } catch (error) {
+      log('Error creating WebSocket:', error);
+      setState(prev => ({
+        ...prev,
+        connecting: false,
+        error: 'Failed to create connection'
+      }));
+    }
+  }, [url, state.connecting, state.connected, state.reconnectAttempt, config.reconnect, config.reconnectAttempts, log]);
+
+  const disconnect = useCallback(() => {
+    log('Disconnecting');
+    cleanup();
+    
+    if (socketRef.current) {
+      socketRef.current.close(1000, 'User initiated disconnect');
+      socketRef.current = null;
+    }
+
+    setState(prev => ({
+      ...prev,
+      connected: false,
+      connecting: false,
+      error: null,
+      reconnectAttempt: 0
+    }));
+  }, [log]);
+
+  const cleanup = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
+
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      return;
+    }
+
+    const delay = config.reconnectInterval * Math.pow(2, state.reconnectAttempt);
+    log(`Reconnecting in ${delay}ms (attempt ${state.reconnectAttempt + 1}/${config.reconnectAttempts})`);
+
+    setState(prev => ({ ...prev, reconnectAttempt: prev.reconnectAttempt + 1 }));
+
+    reconnectTimeoutRef.current = setTimeout(() => {
+      reconnectTimeoutRef.current = null;
+      connect();
+    }, delay);
+  }, [config.reconnectInterval, config.reconnectAttempts, state.reconnectAttempt, log, connect]);
+
+  const setupHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        send({ type: 'broadcast', data: { type: 'heartbeat' } });
+      }
+    }, config.heartbeatInterval);
+  }, [config.heartbeatInterval]);
+
+  const handleMessage = useCallback((message: BroadcastMessage) => {
+    log('Received message:', message);
+
+    if (message.type === 'ack' && message.messageId) {
+      const resolver = pendingMessagesRef.current.get(message.messageId);
+      if (resolver) {
+        resolver(message);
+        pendingMessagesRef.current.delete(message.messageId);
+      }
+    }
+  }, [log]);
+
+  const send = useCallback(async (message: SendMessage): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const messageWithId = {
+        ...message,
+        messageId: message.messageId || generateMessageId()
+      };
+
+      if (!state.connected || !socketRef.current) {
+        if (messageQueueRef.current.length < config.messageQueueSize) {
+          messageQueueRef.current.push(messageWithId);
+          log('Message queued:', messageWithId);
+        } else {
+          log('Message queue full, dropping message:', messageWithId);
+        }
+        resolve();
+        return;
+      }
+
+      try {
+        socketRef.current.send(JSON.stringify(messageWithId));
+        log('Message sent:', messageWithId);
+
+        if (messageWithId.messageId) {
+          pendingMessagesRef.current.set(messageWithId.messageId, resolve);
+          
+          setTimeout(() => {
+            if (pendingMessagesRef.current.has(messageWithId.messageId!)) {
+              pendingMessagesRef.current.delete(messageWithId.messageId!);
+              reject(new Error('Message timeout'));
+            }
+          }, 5000);
+        } else {
+          resolve();
+        }
+      } catch (error) {
+        log('Error sending message:', error);
+        reject(error);
+      }
+    });
+  }, [state.connected, config.messageQueueSize, log, generateMessageId]);
+
+  const flushMessageQueue = useCallback(() => {
+    const queue = messageQueueRef.current.splice(0);
+    log(`Flushing ${queue.length} queued messages`);
+
+    queue.forEach(message => {
+      send(message).catch(error => {
+        log('Error sending queued message:', error);
+      });
+    });
+  }, [send, log]);
+
+  const subscribe = useCallback(async (channel: string): Promise<void> => {
+    return send({ type: 'subscribe', channel });
+  }, [send]);
+
+  const unsubscribe = useCallback(async (channel: string): Promise<void> => {
+    return send({ type: 'unsubscribe', channel });
+  }, [send]);
+
+  const broadcast = useCallback(async (channel: string, data: any): Promise<void> => {
+    return send({ type: 'broadcast', channel, data });
+  }, [send]);
+
+  const reconnect = useCallback(() => {
+    setState(prev => ({ ...prev, reconnectAttempt: 0 }));
+    connect();
+  }, [connect]);
+
+  useEffect(() => {
+    connect();
+    return () => {
+      cleanup();
+      disconnect();
+    };
+  }, []);
+
+  return {
+    state,
+    send,
+    subscribe,
+    unsubscribe,
+    broadcast,
+    disconnect,
+    reconnect
+  };
+}
+
+export function useSubscription(channel: string): SubscriptionHookReturn {
+  const context = useContext(BroadcastContext);
+  
+  if (!context) {
+    throw new Error('useSubscription must be used within a BroadcastProvider');
+  }
+
+  const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({
+    channel,
+    subscribed: false,
+    subscribing: false,
+    error: null,
+    messageCount: 0,
+    lastMessage: null
+  });
+
+  const [messages, setMessages] = useState<BroadcastMessage[]>([]);
+
+  const subscribe = useCallback(async () => {
+    setSubscriptionState(prev => ({ ...prev, subscribing: true, error: null }));
+    
+    try {
+      await context.subscribe(channel);
+      setSubscriptionState(prev => ({
+        ...prev,
+        subscribed: true,
+        subscribing: false
+      }));
+    } catch (error) {
+      setSubscriptionState(prev => ({
+        ...prev,
+        subscribing: false,
+        error: error instanceof Error ? error.message : 'Subscription failed'
+      }));
+    }
+  }, [context, channel]);
+
+  const unsubscribe = useCallback(async () => {
+    try {
+      await context.unsubscribe(channel);
+      setSubscriptionState(prev => ({
+        ...prev,
+        subscribed: false,
+        subscribing: false
+      }));
+    } catch (error) {
+      setSubscriptionState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Unsubscription failed'
+      }));
+    }
+  }, [context, channel]);
+
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setSubscriptionState(prev => ({
+      ...prev,
+      messageCount: 0,
+      lastMessage: null
+    }));
+  }, []);
+
+  useEffect(() => {
+    const handleMessage = (message: BroadcastMessage) => {
+      if (message.channel === channel) {
+        setMessages(prev => [...prev, message].slice(-100));
+        setSubscriptionState(prev => ({
+          ...prev,
+          messageCount: prev.messageCount + 1,
+          lastMessage: Date.now()
+        }));
+      }
+    };
+
+    // Note: In a real implementation, you'd need to add message listener to context
+    // This is a simplified version for demonstration
+
+    return () => {
+      // Cleanup message listener
+    };
+  }, [channel]);
+
+  return {
+    state: subscriptionState,
+    messages,
+    subscribe,
+    unsubscribe,
+    clearMessages
+  };
+}
+
+export function useBroadcast() {
+  const context = useContext(BroadcastContext);
+  
+  if (!context) {
+    throw new Error('useBroadcast must be used within a BroadcastProvider');
+  }
+
+  return {
+    broadcast: context.broadcast,
+    send: context.send,
+    state: context.state
+  };
+}
