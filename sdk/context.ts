@@ -1,8 +1,7 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { 
   BroadcastContextValue, 
-  BroadcastSocketOptions, 
-  SendMessage 
+  BroadcastSocketOptions 
 } from './types';
 import { useBroadcastSocket } from './hooks';
 
@@ -18,7 +17,7 @@ export function BroadcastProvider({
   url, 
   options = {}, 
   children 
-}: BroadcastProviderProps): JSX.Element {
+}: BroadcastProviderProps): React.ReactElement {
   const { 
     state, 
     send, 

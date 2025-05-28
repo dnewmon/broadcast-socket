@@ -94,8 +94,8 @@ export function useBroadcastSocket(
     const queue = messageQueueRef.current.splice(0);
     log(`Flushing ${queue.length} queued messages`);
 
-    queue.forEach(message => {
-      send(message).catch(error => {
+    queue.forEach((message: SendMessage) => {
+      send(message).catch((error: Error) => {
         log('Error sending queued message:', error);
       });
     });
@@ -106,7 +106,7 @@ export function useBroadcastSocket(
       return;
     }
 
-    setState(prev => ({ ...prev, connecting: true, error: null }));
+    setState((prev: BroadcastSocketState) => ({ ...prev, connecting: true, error: null }));
     log('Connecting to', url);
 
     try {
@@ -115,7 +115,7 @@ export function useBroadcastSocket(
 
       socket.onopen = () => {
         log('Connected');
-        setState(prev => ({
+        setState((prev: BroadcastSocketState) => ({
           ...prev,
           connected: true,
           connecting: false,
@@ -141,7 +141,7 @@ export function useBroadcastSocket(
         log('Disconnected', event.code, event.reason);
         cleanup();
         
-        setState(prev => ({
+        setState((prev: BroadcastSocketState) => ({
           ...prev,
           connected: false,
           connecting: false,
@@ -155,12 +155,12 @@ export function useBroadcastSocket(
 
       socket.onerror = (error) => {
         log('WebSocket error:', error);
-        setState(prev => ({ ...prev, error: 'Connection error' }));
+        setState((prev: BroadcastSocketState) => ({ ...prev, error: 'Connection error' }));
       };
 
     } catch (error) {
       log('Error creating WebSocket:', error);
-      setState(prev => ({
+      setState((prev: BroadcastSocketState) => ({
         ...prev,
         connecting: false,
         error: 'Failed to create connection'
@@ -177,7 +177,7 @@ export function useBroadcastSocket(
       socketRef.current = null;
     }
 
-    setState(prev => ({
+    setState((prev: BroadcastSocketState) => ({
       ...prev,
       connected: false,
       connecting: false,
@@ -206,7 +206,7 @@ export function useBroadcastSocket(
     const delay = config.reconnectInterval * Math.pow(2, state.reconnectAttempt);
     log(`Reconnecting in ${delay}ms (attempt ${state.reconnectAttempt + 1}/${config.reconnectAttempts})`);
 
-    setState(prev => ({ ...prev, reconnectAttempt: prev.reconnectAttempt + 1 }));
+    setState((prev: BroadcastSocketState) => ({ ...prev, reconnectAttempt: prev.reconnectAttempt + 1 }));
 
     reconnectTimeoutRef.current = setTimeout(() => {
       reconnectTimeoutRef.current = null;
@@ -237,7 +237,7 @@ export function useBroadcastSocket(
       }
     }
 
-    messageListenersRef.current.forEach(listener => {
+    messageListenersRef.current.forEach((listener: (message: BroadcastMessage) => void) => {
       try {
         listener(message);
       } catch (error) {
@@ -269,7 +269,7 @@ export function useBroadcastSocket(
   }, [send]);
 
   const reconnect = useCallback(() => {
-    setState(prev => ({ ...prev, reconnectAttempt: 0 }));
+    setState((prev: BroadcastSocketState) => ({ ...prev, reconnectAttempt: 0 }));
     connect();
   }, [connect]);
 
@@ -312,17 +312,17 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
   const [messages, setMessages] = useState<BroadcastMessage[]>([]);
 
   const subscribe = useCallback(async () => {
-    setSubscriptionState(prev => ({ ...prev, subscribing: true, error: null }));
+    setSubscriptionState((prev: SubscriptionState) => ({ ...prev, subscribing: true, error: null }));
     
     try {
       await context.subscribe(channel);
-      setSubscriptionState(prev => ({
+      setSubscriptionState((prev: SubscriptionState) => ({
         ...prev,
         subscribed: true,
         subscribing: false
       }));
     } catch (error) {
-      setSubscriptionState(prev => ({
+      setSubscriptionState((prev: SubscriptionState) => ({
         ...prev,
         subscribing: false,
         error: error instanceof Error ? error.message : 'Subscription failed'
@@ -333,13 +333,13 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
   const unsubscribe = useCallback(async () => {
     try {
       await context.unsubscribe(channel);
-      setSubscriptionState(prev => ({
+      setSubscriptionState((prev: SubscriptionState) => ({
         ...prev,
         subscribed: false,
         subscribing: false
       }));
     } catch (error) {
-      setSubscriptionState(prev => ({
+      setSubscriptionState((prev: SubscriptionState) => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Unsubscription failed'
       }));
@@ -348,7 +348,7 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
 
   const clearMessages = useCallback(() => {
     setMessages([]);
-    setSubscriptionState(prev => ({
+    setSubscriptionState((prev: SubscriptionState) => ({
       ...prev,
       messageCount: 0,
       lastMessage: null
@@ -358,8 +358,8 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
   useEffect(() => {
     const handleMessage = (message: BroadcastMessage) => {
       if (message.channel === channel && message.type === 'message') {
-        setMessages(prev => [...prev, message].slice(-100));
-        setSubscriptionState(prev => ({
+        setMessages((prev: BroadcastMessage[]) => [...prev, message].slice(-100));
+        setSubscriptionState((prev: SubscriptionState) => ({
           ...prev,
           messageCount: prev.messageCount + 1,
           lastMessage: Date.now()

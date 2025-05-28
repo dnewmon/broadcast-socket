@@ -42,6 +42,7 @@ export interface BroadcastHookReturn {
     broadcast: (channel: string, data: any) => Promise<void>;
     disconnect: () => void;
     reconnect: () => void;
+    addMessageListener: (listener: (message: BroadcastMessage) => void) => () => void;
 }
 export interface SubscriptionHookReturn {
     state: SubscriptionState;
@@ -57,5 +58,6 @@ export interface BroadcastContextValue {
     unsubscribe: (channel: string) => Promise<void>;
     broadcast: (channel: string, data: any) => Promise<void>;
     send: (message: SendMessage) => Promise<void>;
+    addMessageListener: (listener: (message: BroadcastMessage) => void) => () => void;
 }
 //# sourceMappingURL=types.d.ts.map

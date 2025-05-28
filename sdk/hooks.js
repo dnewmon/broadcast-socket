@@ -27,6 +27,7 @@ function useBroadcastSocket(url, options = {}) {
     const heartbeatIntervalRef = (0, react_1.useRef)(null);
     const messageQueueRef = (0, react_1.useRef)([]);
     const pendingMessagesRef = (0, react_1.useRef)(new Map());
+    const messageListenersRef = (0, react_1.useRef)(new Set());
     const log = (0, react_1.useCallback)((message, ...args) => {
         if (config.debug) {
             console.log(`[BroadcastSocket] ${message}`, ...args);
@@ -35,121 +36,6 @@ function useBroadcastSocket(url, options = {}) {
     const generateMessageId = (0, react_1.useCallback)(() => {
         return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }, []);
-    const connect = (0, react_1.useCallback)(() => {
-        if (state.connecting || state.connected) {
-            return;
-        }
-        setState(prev => ({ ...prev, connecting: true, error: null }));
-        log('Connecting to', url);
-        try {
-            const socket = new WebSocket(url);
-            socketRef.current = socket;
-            socket.onopen = () => {
-                log('Connected');
-                setState(prev => ({
-                    ...prev,
-                    connected: true,
-                    connecting: false,
-                    error: null,
-                    reconnectAttempt: 0,
-                    lastConnected: Date.now()
-                }));
-                flushMessageQueue();
-                setupHeartbeat();
-            };
-            socket.onmessage = (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    handleMessage(message);
-                }
-                catch (error) {
-                    log('Error parsing message:', error);
-                }
-            };
-            socket.onclose = (event) => {
-                log('Disconnected', event.code, event.reason);
-                cleanup();
-                setState(prev => ({
-                    ...prev,
-                    connected: false,
-                    connecting: false,
-                    error: event.reason || 'Connection closed'
-                }));
-                if (config.reconnect && state.reconnectAttempt < config.reconnectAttempts) {
-                    scheduleReconnect();
-                }
-            };
-            socket.onerror = (error) => {
-                log('WebSocket error:', error);
-                setState(prev => ({ ...prev, error: 'Connection error' }));
-            };
-        }
-        catch (error) {
-            log('Error creating WebSocket:', error);
-            setState(prev => ({
-                ...prev,
-                connecting: false,
-                error: 'Failed to create connection'
-            }));
-        }
-    }, [url, state.connecting, state.connected, state.reconnectAttempt, config.reconnect, config.reconnectAttempts, log]);
-    const disconnect = (0, react_1.useCallback)(() => {
-        log('Disconnecting');
-        cleanup();
-        if (socketRef.current) {
-            socketRef.current.close(1000, 'User initiated disconnect');
-            socketRef.current = null;
-        }
-        setState(prev => ({
-            ...prev,
-            connected: false,
-            connecting: false,
-            error: null,
-            reconnectAttempt: 0
-        }));
-    }, [log]);
-    const cleanup = (0, react_1.useCallback)(() => {
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-            reconnectTimeoutRef.current = null;
-        }
-        if (heartbeatIntervalRef.current) {
-            clearInterval(heartbeatIntervalRef.current);
-            heartbeatIntervalRef.current = null;
-        }
-    }, []);
-    const scheduleReconnect = (0, react_1.useCallback)(() => {
-        if (reconnectTimeoutRef.current) {
-            return;
-        }
-        const delay = config.reconnectInterval * Math.pow(2, state.reconnectAttempt);
-        log(`Reconnecting in ${delay}ms (attempt ${state.reconnectAttempt + 1}/${config.reconnectAttempts})`);
-        setState(prev => ({ ...prev, reconnectAttempt: prev.reconnectAttempt + 1 }));
-        reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            connect();
-        }, delay);
-    }, [config.reconnectInterval, config.reconnectAttempts, state.reconnectAttempt, log, connect]);
-    const setupHeartbeat = (0, react_1.useCallback)(() => {
-        if (heartbeatIntervalRef.current) {
-            clearInterval(heartbeatIntervalRef.current);
-        }
-        heartbeatIntervalRef.current = setInterval(() => {
-            if (socketRef.current?.readyState === WebSocket.OPEN) {
-                send({ type: 'broadcast', data: { type: 'heartbeat' } });
-            }
-        }, config.heartbeatInterval);
-    }, [config.heartbeatInterval]);
-    const handleMessage = (0, react_1.useCallback)((message) => {
-        log('Received message:', message);
-        if (message.type === 'ack' && message.messageId) {
-            const resolver = pendingMessagesRef.current.get(message.messageId);
-            if (resolver) {
-                resolver(message);
-                pendingMessagesRef.current.delete(message.messageId);
-            }
-        }
-    }, [log]);
     const send = (0, react_1.useCallback)(async (message) => {
         return new Promise((resolve, reject) => {
             const messageWithId = {
@@ -192,12 +78,141 @@ function useBroadcastSocket(url, options = {}) {
     const flushMessageQueue = (0, react_1.useCallback)(() => {
         const queue = messageQueueRef.current.splice(0);
         log(`Flushing ${queue.length} queued messages`);
-        queue.forEach(message => {
-            send(message).catch(error => {
+        queue.forEach((message) => {
+            send(message).catch((error) => {
                 log('Error sending queued message:', error);
             });
         });
     }, [send, log]);
+    const connect = (0, react_1.useCallback)(() => {
+        if (state.connecting || state.connected) {
+            return;
+        }
+        setState((prev) => ({ ...prev, connecting: true, error: null }));
+        log('Connecting to', url);
+        try {
+            const socket = new WebSocket(url);
+            socketRef.current = socket;
+            socket.onopen = () => {
+                log('Connected');
+                setState((prev) => ({
+                    ...prev,
+                    connected: true,
+                    connecting: false,
+                    error: null,
+                    reconnectAttempt: 0,
+                    lastConnected: Date.now()
+                }));
+                flushMessageQueue();
+                setupHeartbeat();
+            };
+            socket.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleMessage(message);
+                }
+                catch (error) {
+                    log('Error parsing message:', error);
+                }
+            };
+            socket.onclose = (event) => {
+                log('Disconnected', event.code, event.reason);
+                cleanup();
+                setState((prev) => ({
+                    ...prev,
+                    connected: false,
+                    connecting: false,
+                    error: event.reason || 'Connection closed'
+                }));
+                if (config.reconnect && state.reconnectAttempt < config.reconnectAttempts) {
+                    scheduleReconnect();
+                }
+            };
+            socket.onerror = (error) => {
+                log('WebSocket error:', error);
+                setState((prev) => ({ ...prev, error: 'Connection error' }));
+            };
+        }
+        catch (error) {
+            log('Error creating WebSocket:', error);
+            setState((prev) => ({
+                ...prev,
+                connecting: false,
+                error: 'Failed to create connection'
+            }));
+        }
+    }, [url, state.connecting, state.connected, state.reconnectAttempt, config.reconnect, config.reconnectAttempts, log]);
+    const disconnect = (0, react_1.useCallback)(() => {
+        log('Disconnecting');
+        cleanup();
+        if (socketRef.current) {
+            socketRef.current.close(1000, 'User initiated disconnect');
+            socketRef.current = null;
+        }
+        setState((prev) => ({
+            ...prev,
+            connected: false,
+            connecting: false,
+            error: null,
+            reconnectAttempt: 0
+        }));
+    }, [log]);
+    const cleanup = (0, react_1.useCallback)(() => {
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
+        if (heartbeatIntervalRef.current) {
+            clearInterval(heartbeatIntervalRef.current);
+            heartbeatIntervalRef.current = null;
+        }
+    }, []);
+    const scheduleReconnect = (0, react_1.useCallback)(() => {
+        if (reconnectTimeoutRef.current) {
+            return;
+        }
+        const delay = config.reconnectInterval * Math.pow(2, state.reconnectAttempt);
+        log(`Reconnecting in ${delay}ms (attempt ${state.reconnectAttempt + 1}/${config.reconnectAttempts})`);
+        setState((prev) => ({ ...prev, reconnectAttempt: prev.reconnectAttempt + 1 }));
+        reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            connect();
+        }, delay);
+    }, [config.reconnectInterval, config.reconnectAttempts, state.reconnectAttempt, log, connect]);
+    const setupHeartbeat = (0, react_1.useCallback)(() => {
+        if (heartbeatIntervalRef.current) {
+            clearInterval(heartbeatIntervalRef.current);
+        }
+        heartbeatIntervalRef.current = setInterval(() => {
+            if (socketRef.current?.readyState === WebSocket.OPEN) {
+                send({ type: 'broadcast', data: { type: 'heartbeat' } });
+            }
+        }, config.heartbeatInterval);
+    }, [config.heartbeatInterval]);
+    const handleMessage = (0, react_1.useCallback)((message) => {
+        log('Received message:', message);
+        if (message.type === 'ack' && message.messageId) {
+            const resolver = pendingMessagesRef.current.get(message.messageId);
+            if (resolver) {
+                resolver(message);
+                pendingMessagesRef.current.delete(message.messageId);
+            }
+        }
+        messageListenersRef.current.forEach((listener) => {
+            try {
+                listener(message);
+            }
+            catch (error) {
+                log('Error in message listener:', error);
+            }
+        });
+    }, [log]);
+    const addMessageListener = (0, react_1.useCallback)((listener) => {
+        messageListenersRef.current.add(listener);
+        return () => {
+            messageListenersRef.current.delete(listener);
+        };
+    }, []);
     const subscribe = (0, react_1.useCallback)(async (channel) => {
         return send({ type: 'subscribe', channel });
     }, [send]);
@@ -208,7 +223,7 @@ function useBroadcastSocket(url, options = {}) {
         return send({ type: 'broadcast', channel, data });
     }, [send]);
     const reconnect = (0, react_1.useCallback)(() => {
-        setState(prev => ({ ...prev, reconnectAttempt: 0 }));
+        setState((prev) => ({ ...prev, reconnectAttempt: 0 }));
         connect();
     }, [connect]);
     (0, react_1.useEffect)(() => {
@@ -225,7 +240,8 @@ function useBroadcastSocket(url, options = {}) {
         unsubscribe,
         broadcast,
         disconnect,
-        reconnect
+        reconnect,
+        addMessageListener
     };
 }
 function useSubscription(channel) {
@@ -243,17 +259,17 @@ function useSubscription(channel) {
     });
     const [messages, setMessages] = (0, react_1.useState)([]);
     const subscribe = (0, react_1.useCallback)(async () => {
-        setSubscriptionState(prev => ({ ...prev, subscribing: true, error: null }));
+        setSubscriptionState((prev) => ({ ...prev, subscribing: true, error: null }));
         try {
             await context.subscribe(channel);
-            setSubscriptionState(prev => ({
+            setSubscriptionState((prev) => ({
                 ...prev,
                 subscribed: true,
                 subscribing: false
             }));
         }
         catch (error) {
-            setSubscriptionState(prev => ({
+            setSubscriptionState((prev) => ({
                 ...prev,
                 subscribing: false,
                 error: error instanceof Error ? error.message : 'Subscription failed'
@@ -263,14 +279,14 @@ function useSubscription(channel) {
     const unsubscribe = (0, react_1.useCallback)(async () => {
         try {
             await context.unsubscribe(channel);
-            setSubscriptionState(prev => ({
+            setSubscriptionState((prev) => ({
                 ...prev,
                 subscribed: false,
                 subscribing: false
             }));
         }
         catch (error) {
-            setSubscriptionState(prev => ({
+            setSubscriptionState((prev) => ({
                 ...prev,
                 error: error instanceof Error ? error.message : 'Unsubscription failed'
             }));
@@ -278,7 +294,7 @@ function useSubscription(channel) {
     }, [context, channel]);
     const clearMessages = (0, react_1.useCallback)(() => {
         setMessages([]);
-        setSubscriptionState(prev => ({
+        setSubscriptionState((prev) => ({
             ...prev,
             messageCount: 0,
             lastMessage: null
@@ -286,18 +302,18 @@ function useSubscription(channel) {
     }, []);
     (0, react_1.useEffect)(() => {
         const handleMessage = (message) => {
-            if (message.channel === channel) {
-                setMessages(prev => [...prev, message].slice(-100));
-                setSubscriptionState(prev => ({
+            if (message.channel === channel && message.type === 'message') {
+                setMessages((prev) => [...prev, message].slice(-100));
+                setSubscriptionState((prev) => ({
                     ...prev,
                     messageCount: prev.messageCount + 1,
                     lastMessage: Date.now()
                 }));
             }
         };
-        return () => {
-        };
-    }, [channel]);
+        const removeListener = context.addMessageListener(handleMessage);
+        return removeListener;
+    }, [channel, context]);
     return {
         state: subscriptionState,
         messages,

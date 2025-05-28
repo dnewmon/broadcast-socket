@@ -40,14 +40,15 @@ const react_1 = __importStar(require("react"));
 const hooks_1 = require("./hooks");
 exports.BroadcastContext = (0, react_1.createContext)(null);
 function BroadcastProvider({ url, options = {}, children }) {
-    const { state, send, subscribe, unsubscribe, broadcast } = (0, hooks_1.useBroadcastSocket)(url, options);
+    const { state, send, subscribe, unsubscribe, broadcast, addMessageListener } = (0, hooks_1.useBroadcastSocket)(url, options);
     const contextValue = {
         socket: null,
         state,
         subscribe,
         unsubscribe,
         broadcast,
-        send
+        send,
+        addMessageListener
     };
     return react_1.default.createElement(exports.BroadcastContext.Provider, { value: contextValue }, children);
 }
