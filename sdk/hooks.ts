@@ -48,6 +48,58 @@ export function useBroadcastSocket(
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
 
+  const send = useCallback(async (message: SendMessage): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const messageWithId = {
+        ...message,
+        messageId: message.messageId || generateMessageId()
+      };
+
+      if (!state.connected || !socketRef.current) {
+        if (messageQueueRef.current.length < config.messageQueueSize) {
+          messageQueueRef.current.push(messageWithId);
+          log('Message queued:', messageWithId);
+        } else {
+          log('Message queue full, dropping message:', messageWithId);
+        }
+        resolve();
+        return;
+      }
+
+      try {
+        socketRef.current.send(JSON.stringify(messageWithId));
+        log('Message sent:', messageWithId);
+
+        if (messageWithId.messageId) {
+          pendingMessagesRef.current.set(messageWithId.messageId, resolve);
+          
+          setTimeout(() => {
+            if (pendingMessagesRef.current.has(messageWithId.messageId!)) {
+              pendingMessagesRef.current.delete(messageWithId.messageId!);
+              reject(new Error('Message timeout'));
+            }
+          }, 5000);
+        } else {
+          resolve();
+        }
+      } catch (error) {
+        log('Error sending message:', error);
+        reject(error);
+      }
+    });
+  }, [state.connected, config.messageQueueSize, log, generateMessageId]);
+
+  const flushMessageQueue = useCallback(() => {
+    const queue = messageQueueRef.current.splice(0);
+    log(`Flushing ${queue.length} queued messages`);
+
+    queue.forEach(message => {
+      send(message).catch(error => {
+        log('Error sending queued message:', error);
+      });
+    });
+  }, [send, log]);
+
   const connect = useCallback(() => {
     if (state.connecting || state.connected) {
       return;
@@ -185,57 +237,7 @@ export function useBroadcastSocket(
     }
   }, [log]);
 
-  const send = useCallback(async (message: SendMessage): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const messageWithId = {
-        ...message,
-        messageId: message.messageId || generateMessageId()
-      };
 
-      if (!state.connected || !socketRef.current) {
-        if (messageQueueRef.current.length < config.messageQueueSize) {
-          messageQueueRef.current.push(messageWithId);
-          log('Message queued:', messageWithId);
-        } else {
-          log('Message queue full, dropping message:', messageWithId);
-        }
-        resolve();
-        return;
-      }
-
-      try {
-        socketRef.current.send(JSON.stringify(messageWithId));
-        log('Message sent:', messageWithId);
-
-        if (messageWithId.messageId) {
-          pendingMessagesRef.current.set(messageWithId.messageId, resolve);
-          
-          setTimeout(() => {
-            if (pendingMessagesRef.current.has(messageWithId.messageId!)) {
-              pendingMessagesRef.current.delete(messageWithId.messageId!);
-              reject(new Error('Message timeout'));
-            }
-          }, 5000);
-        } else {
-          resolve();
-        }
-      } catch (error) {
-        log('Error sending message:', error);
-        reject(error);
-      }
-    });
-  }, [state.connected, config.messageQueueSize, log, generateMessageId]);
-
-  const flushMessageQueue = useCallback(() => {
-    const queue = messageQueueRef.current.splice(0);
-    log(`Flushing ${queue.length} queued messages`);
-
-    queue.forEach(message => {
-      send(message).catch(error => {
-        log('Error sending queued message:', error);
-      });
-    });
-  }, [send, log]);
 
   const subscribe = useCallback(async (channel: string): Promise<void> => {
     return send({ type: 'subscribe', channel });
