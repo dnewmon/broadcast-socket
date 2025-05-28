@@ -94,10 +94,7 @@ docker-compose up
 
 ```bash
 # Install from GitHub repository
-npm install git+ssh://github.com/dnewmon/broadcast-socket.git
-
-# Or install from npm (when published)
-npm install broadcast-socket
+npm install dnewmon/broadcast-socket
 ```
 
 ### Basic Setup
@@ -122,10 +119,10 @@ import { useBroadcastSocket, useSubscription, useBroadcast } from 'broadcast-soc
 
 function ChatComponent() {
   // Main connection hook
-  const { isConnected, connectionState } = useBroadcastSocket();
+  const { state } = useBroadcastSocket('ws://localhost:8080');
   
   // Subscribe to a channel
-  const { messages, isSubscribed } = useSubscription('chat-room');
+  const { state: subState, messages } = useSubscription('chat-room');
   
   // Broadcasting capabilities
   const { broadcast } = useBroadcast();
@@ -136,7 +133,8 @@ function ChatComponent() {
   
   return (
     <div>
-      <div>Status: {isConnected ? 'Connected' : 'Disconnected'}</div>
+      <div>Status: {state.connected ? 'Connected' : 'Disconnected'}</div>
+      <div>Subscribed: {subState.subscribed ? 'Yes' : 'No'}</div>
       <div>Messages: {messages.length}</div>
       <button onClick={sendMessage}>Send Message</button>
     </div>
@@ -150,10 +148,10 @@ function ChatComponent() {
 const options = {
   reconnect: true,              // Enable automatic reconnection
   reconnectInterval: 1000,      // Initial reconnect delay (ms)
-  maxReconnectInterval: 30000,  // Maximum reconnect delay (ms)
-  reconnectDecay: 1.5,          // Exponential backoff factor
-  maxReconnectAttempts: 10,     // Maximum reconnection attempts
-  timeoutInterval: 2000,        // Connection timeout (ms)
+  reconnectAttempts: 5,         // Maximum reconnection attempts
+  heartbeatInterval: 30000,     // Heartbeat interval (ms)
+  messageQueueSize: 100,        // Maximum queued messages
+  debug: false,                 // Enable debug logging
 };
 
 <BroadcastProvider url="ws://localhost:8080" options={options}>
@@ -249,17 +247,19 @@ interface ServerMessage {
 ```typescript
 interface BroadcastSocketOptions {
   reconnect?: boolean;
+  reconnectAttempts?: number;
   reconnectInterval?: number;
-  maxReconnectInterval?: number;
-  reconnectDecay?: number;
-  maxReconnectAttempts?: number;
-  timeoutInterval?: number;
+  heartbeatInterval?: number;
+  messageQueueSize?: number;
+  debug?: boolean;
 }
 
 interface BroadcastSocketState {
-  isConnected: boolean;
-  connectionState: 'connecting' | 'connected' | 'disconnected' | 'error';
-  lastError?: Error;
+  connected: boolean;
+  connecting: boolean;
+  error: string | null;
+  reconnectAttempt: number;
+  lastConnected: number | null;
 }
 ```
 
