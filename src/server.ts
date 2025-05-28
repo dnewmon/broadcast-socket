@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import express from 'express';
 import cors from 'cors';
-import { createServer } from 'http';
+import { createServer, Server } from 'http';
 
 import { Client, ClientMessage, ServerMessage, ServerStats } from './types';
 import { RedisManager } from './redis';
@@ -18,7 +18,7 @@ import {
 
 export class BroadcastServer {
   private server: WebSocket.Server;
-  private httpServer: any;
+  private httpServer: Server;
   private app: express.Application;
   private redis: RedisManager;
   private subscriptionManager: SubscriptionManager;

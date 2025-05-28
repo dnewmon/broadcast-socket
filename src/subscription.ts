@@ -154,11 +154,15 @@ export class SubscriptionManager {
     try {
       const storedSubscriptions = await this.redis.getClientSubscriptions(clientId);
       
-      for (const channel of storedSubscriptions) {
-        await this.subscribeClient(clientId, channel);
+      // Ensure we have an array before iterating
+      if (Array.isArray(storedSubscriptions)) {
+        for (const channel of storedSubscriptions) {
+          await this.subscribeClient(clientId, channel);
+        }
+        return storedSubscriptions;
       }
-
-      return storedSubscriptions;
+      
+      return [];
     } catch (error) {
       console.error(`Error restoring subscriptions for client ${clientId}:`, error);
       return [];

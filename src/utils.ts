@@ -17,7 +17,7 @@ export function isValidChannel(channel: string): boolean {
   return /^[a-zA-Z0-9_\-\.]+$/.test(channel) && channel.length <= 100;
 }
 
-export function sanitizeData(data: any): any {
+export function sanitizeData(data: unknown): unknown {
   if (data === null || data === undefined) {
     return data;
   }
@@ -37,28 +37,30 @@ export function sanitizeData(data: any): any {
   return data;
 }
 
-export function validateMessage(message: any): { valid: boolean; error?: string } {
+export function validateMessage(message: unknown): { valid: boolean; error?: string } {
   if (!message || typeof message !== 'object') {
     return { valid: false, error: 'Message must be an object' };
   }
 
-  if (!message.type || typeof message.type !== 'string') {
+  const msg = message as Record<string, unknown>;
+
+  if (!msg.type || typeof msg.type !== 'string') {
     return { valid: false, error: 'Message must have a valid type' };
   }
 
   const validTypes = ['subscribe', 'unsubscribe', 'broadcast'];
-  if (!validTypes.includes(message.type)) {
+  if (!validTypes.includes(msg.type)) {
     return { valid: false, error: 'Invalid message type' };
   }
 
-  if (message.type === 'subscribe' || message.type === 'unsubscribe') {
-    if (!message.channel || !isValidChannel(message.channel)) {
+  if (msg.type === 'subscribe' || msg.type === 'unsubscribe') {
+    if (!msg.channel || !isValidChannel(msg.channel as string)) {
       return { valid: false, error: 'Invalid or missing channel' };
     }
   }
 
-  if (message.type === 'broadcast') {
-    if (message.channel && !isValidChannel(message.channel)) {
+  if (msg.type === 'broadcast') {
+    if (msg.channel && !isValidChannel(msg.channel as string)) {
       return { valid: false, error: 'Invalid channel' };
     }
   }
@@ -81,12 +83,12 @@ export function formatError(error: Error): string {
   return `${error.name}: ${error.message}`;
 }
 
-export function logWithTimestamp(level: string, message: string, ...args: any[]): void {
+export function logWithTimestamp(level: string, message: string, ...args: unknown[]): void {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, ...args);
 }
 
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -98,7 +100,7 @@ export function debounce<T extends (...args: any[]) => any>(
   };
 }
 
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {

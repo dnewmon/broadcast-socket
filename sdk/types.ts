@@ -18,7 +18,7 @@ export interface BroadcastSocketState {
 export interface BroadcastMessage {
   type: 'message' | 'ack' | 'error' | 'ping';
   channel?: string;
-  data?: any;
+  data?: unknown;
   messageId?: string;
   timestamp: number;
 }
@@ -26,7 +26,7 @@ export interface BroadcastMessage {
 export interface SendMessage {
   type: 'subscribe' | 'unsubscribe' | 'broadcast';
   channel?: string;
-  data?: any;
+  data?: unknown;
   messageId?: string;
 }
 
@@ -44,7 +44,7 @@ export interface BroadcastHookReturn {
   send: (message: SendMessage) => Promise<void>;
   subscribe: (channel: string) => Promise<void>;
   unsubscribe: (channel: string) => Promise<void>;
-  broadcast: (channel: string, data: any) => Promise<void>;
+  broadcast: (channel: string, data: unknown) => Promise<void>;
   disconnect: () => void;
   reconnect: () => void;
   addMessageListener: (listener: (message: BroadcastMessage) => void) => () => void;
@@ -63,7 +63,7 @@ export interface BroadcastContextValue {
   state: BroadcastSocketState;
   subscribe: (channel: string) => Promise<void>;
   unsubscribe: (channel: string) => Promise<void>;
-  broadcast: (channel: string, data: any) => Promise<void>;
+  broadcast: (channel: string, data: unknown) => Promise<void>;
   send: (message: SendMessage) => Promise<void>;
   addMessageListener: (listener: (message: BroadcastMessage) => void) => () => void;
 }

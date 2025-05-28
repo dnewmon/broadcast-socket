@@ -31,7 +31,7 @@ export class BroadcastManager {
     });
   }
 
-  async broadcastToChannel(channel: string, data: any, senderId?: string): Promise<string> {
+  async broadcastToChannel(channel: string, data: unknown, senderId?: string): Promise<string> {
     const messageId = uuidv4();
     const timestamp = Date.now();
 
@@ -59,7 +59,7 @@ export class BroadcastManager {
     return messageId;
   }
 
-  async broadcastToAll(data: any, senderId?: string): Promise<string> {
+  async broadcastToAll(data: unknown, senderId?: string): Promise<string> {
     return this.broadcastToChannel('*', data, senderId);
   }
 
@@ -90,7 +90,7 @@ export class BroadcastManager {
 
   private async deliverToChannelSubscribers(
     channel: string, 
-    data: any, 
+    data: unknown, 
     messageId: string, 
     timestamp: number, 
     senderId?: string
@@ -117,7 +117,7 @@ export class BroadcastManager {
   }
 
   private async deliverToAllClients(
-    data: any, 
+    data: unknown, 
     messageId: string, 
     timestamp: number, 
     senderId?: string
@@ -288,8 +288,11 @@ export class BroadcastManager {
 
       for (const key of keys.slice(-limit)) {
         const message = await this.redis.getMessage(key.replace('message:', ''));
-        if (message && (channel === '*' || message.channel === channel)) {
-          messages.push(message);
+        if (message && typeof message === 'object' && message !== null) {
+          const broadcastMessage = message as BroadcastMessage;
+          if (channel === '*' || broadcastMessage.channel === channel) {
+            messages.push(broadcastMessage);
+          }
         }
       }
 

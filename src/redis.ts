@@ -41,7 +41,7 @@ export class RedisManager {
     ]);
   }
 
-  async publishMessage(channel: string, message: any): Promise<void> {
+  async publishMessage(channel: string, message: unknown): Promise<void> {
     const messageStr = JSON.stringify(message);
     console.log(`[REDIS] Publishing to channel ${channel}:`, messageStr);
     const result = await this.publisher.publish(channel, messageStr);
@@ -74,7 +74,7 @@ export class RedisManager {
     }
   }
 
-  async storeMessage(messageId: string, message: any, ttl: number = 3600): Promise<void> {
+  async storeMessage(messageId: string, message: unknown, ttl: number = 3600): Promise<void> {
     const key = `message:${messageId}`;
     const messageStr = JSON.stringify(message);
     console.log(`[REDIS] Storing message with key ${key} (TTL: ${ttl}s):`, messageStr);
@@ -82,7 +82,7 @@ export class RedisManager {
     console.log(`[REDIS] Message ${messageId} stored successfully`);
   }
 
-  async getMessage(messageId: string): Promise<any | null> {
+  async getMessage(messageId: string): Promise<unknown | null> {
     const message = await this.client.get(`message:${messageId}`);
     return message ? JSON.parse(message) : null;
   }

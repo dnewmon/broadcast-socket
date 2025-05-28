@@ -34,7 +34,7 @@ function useBroadcastSocket(url, options = {}) {
         }
     }, [config.debug]);
     const generateMessageId = (0, react_1.useCallback)(() => {
-        return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     }, []);
     const send = (0, react_1.useCallback)(async (message) => {
         return new Promise((resolve, reject) => {
@@ -57,7 +57,7 @@ function useBroadcastSocket(url, options = {}) {
                 socketRef.current.send(JSON.stringify(messageWithId));
                 log('Message sent:', messageWithId);
                 if (messageWithId.messageId) {
-                    pendingMessagesRef.current.set(messageWithId.messageId, resolve);
+                    pendingMessagesRef.current.set(messageWithId.messageId, () => resolve());
                     setTimeout(() => {
                         if (pendingMessagesRef.current.has(messageWithId.messageId)) {
                             pendingMessagesRef.current.delete(messageWithId.messageId);

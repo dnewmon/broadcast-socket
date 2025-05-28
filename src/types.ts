@@ -1,21 +1,23 @@
 export interface ClientMessage {
   type: 'subscribe' | 'unsubscribe' | 'broadcast';
   channel?: string;
-  data?: any;
+  data?: unknown;
   messageId?: string;
 }
 
 export interface ServerMessage {
   type: 'message' | 'ack' | 'error' | 'ping';
   channel?: string | undefined;
-  data?: any;
+  data?: unknown;
   messageId?: string | undefined;
   timestamp: number;
 }
 
+import { WebSocket } from 'ws';
+
 export interface Client {
   id: string;
-  ws: any;
+  ws: WebSocket;
   subscriptions: Set<string>;
   lastPing: number;
   isAlive: boolean;
@@ -23,7 +25,7 @@ export interface Client {
 
 export interface BroadcastMessage {
   channel: string;
-  data: any;
+  data: unknown;
   messageId: string;
   timestamp: number;
   senderId?: string | undefined;
@@ -46,7 +48,7 @@ export interface ServerStats {
 
 export interface ClusterMessage {
   type: 'broadcast' | 'client-connect' | 'client-disconnect' | 'ping';
-  data?: any;
+  data?: unknown;
   workerId: number;
   timestamp: number;
 }
@@ -58,4 +60,10 @@ export interface ServerConfig {
   workers: number;
   pingInterval: number;
   heartbeatTimeout: number;
+}
+
+export interface WorkerStatsData {
+  connections?: number;
+  messages?: number;
+  uptime?: number;
 }

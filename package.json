@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A horizontally scalable WebSocket broadcasting service",
   "main": "dist/server.js",
+  "type": "module",
   "scripts": {
     "dev": "ts-node src/server.ts",
     "build": "npm run build:server && npm run build:sdk",
@@ -10,8 +11,12 @@
     "build:sdk": "tsc -p tsconfig.sdk.json",
     "start": "node dist/server.js",
     "test": "jest",
-    "lint": "eslint src/**/*.ts",
-    "typecheck": "tsc --noEmit"
+    "lint": "npm run lint:src && npm run lint:sdk",
+    "lint:src": "eslint src/**/*.ts",
+    "lint:sdk": "eslint sdk/**/*.ts",
+    "typecheck": "npm run typecheck:src && npm run typecheck:sdk",
+    "typecheck:src": "tsc --noEmit",
+    "typecheck:sdk": "tsc --noEmit -p tsconfig.sdk.json"
   },
   "keywords": [
     "websocket",

@@ -33,20 +33,20 @@ export function useBroadcastSocket(
   });
 
   const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messageQueueRef = useRef<SendMessage[]>([]);
-  const pendingMessagesRef = useRef<Map<string, (response: any) => void>>(new Map());
+  const pendingMessagesRef = useRef<Map<string, (response: unknown) => void>>(new Map());
   const messageListenersRef = useRef<Set<(message: BroadcastMessage) => void>>(new Set());
 
-  const log = useCallback((message: string, ...args: any[]) => {
+  const log = useCallback((message: string, ...args: unknown[]) => {
     if (config.debug) {
       console.log(`[BroadcastSocket] ${message}`, ...args);
     }
   }, [config.debug]);
 
   const generateMessageId = useCallback(() => {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }, []);
 
   const send = useCallback(async (message: SendMessage): Promise<void> => {
@@ -72,7 +72,7 @@ export function useBroadcastSocket(
         log('Message sent:', messageWithId);
 
         if (messageWithId.messageId) {
-          pendingMessagesRef.current.set(messageWithId.messageId, resolve);
+          pendingMessagesRef.current.set(messageWithId.messageId, () => resolve());
           
           setTimeout(() => {
             if (pendingMessagesRef.current.has(messageWithId.messageId!)) {
@@ -264,7 +264,7 @@ export function useBroadcastSocket(
     return send({ type: 'unsubscribe', channel });
   }, [send]);
 
-  const broadcast = useCallback(async (channel: string, data: any): Promise<void> => {
+  const broadcast = useCallback(async (channel: string, data: unknown): Promise<void> => {
     return send({ type: 'broadcast', channel, data });
   }, [send]);
 

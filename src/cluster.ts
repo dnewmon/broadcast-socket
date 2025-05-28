@@ -1,12 +1,12 @@
 import cluster from 'cluster';
 import { BroadcastServer } from './server';
 import { getServerConfig, logWithTimestamp } from './utils';
-import { ClusterMessage } from './types';
+import { ClusterMessage, WorkerStatsData } from './types';
 
 export class ClusterManager {
   private config = getServerConfig();
   private workers: Map<number, import('cluster').Worker> = new Map();
-  private workerStats: Map<number, any> = new Map();
+  private workerStats: Map<number, {lastPing: number; data?: WorkerStatsData}> = new Map();
 
   constructor() {
     this.setupClusterEvents();
@@ -40,7 +40,7 @@ export class ClusterManager {
       case 'ping':
         this.workerStats.set(worker.id, {
           lastPing: Date.now(),
-          data: message.data
+          data: message.data as WorkerStatsData
         });
         break;
 
@@ -112,7 +112,7 @@ export class ClusterManager {
 
       logWithTimestamp('info', `Cluster health: ${aliveWorkers}/${this.config.workers} workers alive, ${totalConnections} total connections`);
 
-      for (const [_workerId, worker] of this.workers) {
+      for (const worker of this.workers.values()) {
         if (!worker.isDead()) {
           worker.send({
             type: 'ping',
@@ -175,7 +175,7 @@ export class ClusterManager {
     }
   }
 
-  getClusterStats(): any {
+  getClusterStats(): unknown {
     if (!cluster.isMaster) {
       return null;
     }
@@ -219,7 +219,7 @@ export class WorkerBroadcastBridge {
     logWithTimestamp('info', `Worker ${this.workerId} processing cluster broadcast`, message.data);
   }
 
-  broadcastToCluster(data: any): void {
+  broadcastToCluster(data: unknown): void {
     if (process.send) {
       const message: ClusterMessage = {
         type: 'broadcast',

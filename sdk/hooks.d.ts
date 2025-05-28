@@ -2,7 +2,7 @@ import { BroadcastSocketOptions, BroadcastSocketState, SendMessage, BroadcastHoo
 export declare function useBroadcastSocket(url: string, options?: BroadcastSocketOptions): BroadcastHookReturn;
 export declare function useSubscription(channel: string): SubscriptionHookReturn;
 export declare function useBroadcast(): {
-    broadcast: (channel: string, data: any) => Promise<void>;
+    broadcast: (channel: string, data: unknown) => Promise<void>;
     send: (message: SendMessage) => Promise<void>;
     state: BroadcastSocketState;
 };
