@@ -56,12 +56,22 @@ export class RedisManager {
       callback(message);
     };
     
-    await this.subscriber.subscribe(channel, wrappedCallback);
-    console.log(`[REDIS] Successfully subscribed to channel: ${channel}`);
+    // Use pattern subscribe for wildcard channels
+    if (channel.includes('*')) {
+      await this.subscriber.pSubscribe(channel, wrappedCallback);
+      console.log(`[REDIS] Successfully pattern subscribed to channel: ${channel}`);
+    } else {
+      await this.subscriber.subscribe(channel, wrappedCallback);
+      console.log(`[REDIS] Successfully subscribed to channel: ${channel}`);
+    }
   }
 
   async unsubscribeFromChannel(channel: string): Promise<void> {
-    await this.subscriber.unsubscribe(channel);
+    if (channel.includes('*')) {
+      await this.subscriber.pUnsubscribe(channel);
+    } else {
+      await this.subscriber.unsubscribe(channel);
+    }
   }
 
   async storeMessage(messageId: string, message: any, ttl: number = 3600): Promise<void> {
