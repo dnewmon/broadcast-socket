@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "dev": "ts-node src/server.ts",
+    "dev": "./scripts/dev.sh",
     "build": "npm run build:server && npm run build:sdk",
     "build:server": "tsc",
     "build:sdk": "tsc -p tsconfig.sdk.json",
@@ -51,7 +51,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "ts-jest": "^29.1.1",
-    "ts-node": "^10.9.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.2.2"
   },
   "engines": {

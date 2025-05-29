@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { ServerConfig } from './types';
+import { cpus } from 'os';
+import { ServerConfig } from './types.js';
 
 export function generateClientId(): string {
   return uuidv4();
@@ -73,7 +74,7 @@ export function getServerConfig(): ServerConfig {
     port: parseInt(process.env.PORT || '8080', 10),
     corsOrigin: process.env.CORS_ORIGIN || '*',
     redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
-    workers: parseInt(process.env.WORKERS || '0', 10) || require('os').cpus().length,
+    workers: parseInt(process.env.WORKERS || '0', 10) || cpus().length,
     pingInterval: parseInt(process.env.PING_INTERVAL || '30000', 10),
     heartbeatTimeout: parseInt(process.env.HEARTBEAT_TIMEOUT || '60000', 10)
   };

@@ -11,9 +11,10 @@ COPY tsconfig.json ./
 # Install dependencies
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy source code
+# Copy source code and scripts
 COPY src/ ./src/
 COPY sdk/ ./sdk/
+COPY scripts/ ./scripts/
 
 # Build the application
 RUN npm run build

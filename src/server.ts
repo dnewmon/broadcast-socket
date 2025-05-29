@@ -1,12 +1,12 @@
-import WebSocket from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 import express from 'express';
 import cors from 'cors';
 import { createServer, Server } from 'http';
 
-import { Client, ClientMessage, ServerMessage, ServerStats } from './types';
-import { RedisManager } from './redis';
-import { SubscriptionManager } from './subscription';
-import { BroadcastManager } from './broadcast';
+import { Client, ClientMessage, ServerMessage, ServerStats } from './types.js';
+import { RedisManager } from './redis.js';
+import { SubscriptionManager } from './subscription.js';
+import { BroadcastManager } from './broadcast.js';
 import { 
   getServerConfig, 
   validateMessage, 
@@ -14,10 +14,10 @@ import {
   logWithTimestamp, 
   createRateLimiter,
   generateClientId 
-} from './utils';
+} from './utils.js';
 
 export class BroadcastServer {
-  private server: WebSocket.Server;
+  private server: WebSocketServer;
   private httpServer: Server;
   private app: express.Application;
   private redis: RedisManager;
@@ -32,7 +32,7 @@ export class BroadcastServer {
     this.app = express();
     this.setupExpress();
     this.httpServer = createServer(this.app);
-    this.server = new WebSocket.Server({ server: this.httpServer });
+    this.server = new WebSocketServer({ server: this.httpServer });
     
     this.redis = new RedisManager(this.config.redisUrl);
     this.subscriptionManager = new SubscriptionManager(this.redis);
@@ -374,7 +374,7 @@ export class BroadcastServer {
   }
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new BroadcastServer();
   
   process.on('SIGINT', async () => {
