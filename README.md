@@ -28,6 +28,73 @@ A horizontally scalable WebSocket broadcasting service built with Node.js that s
 - `POST /broadcast` - HTTP-based broadcasting
 - `GET /stats` - Connection and performance statistics
 
+### HTTP Broadcasting
+
+Send messages to channels via HTTP POST requests without needing a WebSocket connection.
+
+#### Endpoint
+```
+POST /broadcast
+```
+
+#### Request Format
+```json
+{
+  "channel": "channel-name",
+  "data": {
+    "message": "Hello World!",
+    "timestamp": 1234567890,
+    "user": "john_doe"
+  }
+}
+```
+
+#### Response Format
+```json
+{
+  "messageId": "unique-message-id-uuid",
+  "timestamp": 1234567890
+}
+```
+
+#### Examples
+
+**Using curl:**
+```bash
+curl -X POST http://localhost:8080/broadcast \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "chat-room",
+    "data": {
+      "message": "Hello from HTTP!",
+      "user": "api-client"
+    }
+  }'
+```
+
+**Using Python requests:**
+```python
+import requests
+
+url = "http://localhost:8080/broadcast"
+payload = {
+    "channel": "chat-room", 
+    "data": {
+        "message": "Hello from Python!",
+        "user": "python-client",
+        "timestamp": 1234567890
+    }
+}
+
+response = requests.post(url, json=payload)
+result = response.json()
+print(f"Message sent with ID: {result['messageId']}")
+```
+
+#### Error Responses
+- `400 Bad Request` - Missing channel or data fields
+- `500 Internal Server Error` - Server error during broadcast
+
 ## Requirements
 
 ### System Requirements
