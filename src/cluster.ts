@@ -13,7 +13,7 @@ export class ClusterManager {
   }
 
   private setupClusterEvents(): void {
-    if (cluster.isMaster) {
+    if (cluster.isPrimary) {
       cluster.on('exit', (worker, code, signal) => {
         logWithTimestamp('warn', `Worker ${worker.process.pid} died (${signal || code}). Restarting...`);
         this.workers.delete(worker.id);
@@ -89,7 +89,7 @@ export class ClusterManager {
   }
 
   start(): void {
-    if (cluster.isMaster) {
+    if (cluster.isPrimary) {
       const numWorkers = this.config.workers;
       logWithTimestamp('info', `Starting cluster with ${numWorkers} workers`);
       logWithTimestamp('info', `Master process ID: ${process.pid}`);
@@ -176,7 +176,7 @@ export class ClusterManager {
   }
 
   getClusterStats(): unknown {
-    if (!cluster.isMaster) {
+    if (!cluster.isPrimary) {
       return null;
     }
 

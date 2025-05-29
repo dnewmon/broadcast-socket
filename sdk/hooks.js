@@ -247,7 +247,7 @@ function useBroadcastSocket(url, options = {}) {
 function useSubscription(channel) {
     const context = (0, react_1.useContext)(context_1.BroadcastContext);
     if (!context) {
-        throw new Error('useSubscription must be used within a BroadcastProvider');
+        throw new Error('useSubscription must be used within a BroadcastSocketProvider');
     }
     const [subscriptionState, setSubscriptionState] = (0, react_1.useState)({
         channel,
@@ -341,7 +341,7 @@ function useSubscription(channel) {
 function useBroadcast() {
     const context = (0, react_1.useContext)(context_1.BroadcastContext);
     if (!context) {
-        throw new Error('useBroadcast must be used within a BroadcastProvider');
+        throw new Error('useBroadcast must be used within a BroadcastSocketProvider');
     }
     return {
         broadcast: context.broadcast,

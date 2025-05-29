@@ -101,13 +101,13 @@ npm install dnewmon/broadcast-socket
 
 ```typescript
 import React from 'react';
-import { BroadcastProvider } from 'broadcast-socket';
+import { BroadcastSocketProvider } from 'broadcast-socket/sdk';
 
 function App() {
   return (
-    <BroadcastProvider url="ws://localhost:8080">
+    <BroadcastSocketProvider url="ws://localhost:8080">
       <YourComponent />
-    </BroadcastProvider>
+    </BroadcastSocketProvider>
   );
 }
 ```
@@ -115,7 +115,7 @@ function App() {
 ### Using Hooks
 
 ```typescript
-import { useBroadcastSocket, useSubscription, useBroadcast } from 'broadcast-socket';
+import { useBroadcastSocket, useSubscription, useBroadcast } from 'broadcast-socket/sdk';
 
 function ChatComponent() {
   // Main connection hook
@@ -164,7 +164,7 @@ The `useSubscription` hook provides channel-specific subscription management wit
 #### Basic Usage
 
 ```typescript
-import { useSubscription } from 'broadcast-socket';
+import { useSubscription } from 'broadcast-socket/sdk';
 
 function ChannelComponent() {
   const { 
@@ -291,9 +291,9 @@ const options = {
   debug: false,                 // Enable debug logging
 };
 
-<BroadcastProvider url="ws://localhost:8080" options={options}>
+<BroadcastSocketProvider url="ws://localhost:8080" options={options}>
   <App />
-</BroadcastProvider>
+</BroadcastSocketProvider>
 ```
 
 ## Docker Container

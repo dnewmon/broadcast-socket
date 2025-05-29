@@ -297,7 +297,7 @@ export function useSubscription(channel: string): SubscriptionHookReturn {
   const context = useContext(BroadcastContext);
   
   if (!context) {
-    throw new Error('useSubscription must be used within a BroadcastProvider');
+    throw new Error('useSubscription must be used within a BroadcastSocketProvider');
   }
 
   const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({
@@ -403,7 +403,7 @@ export function useBroadcast() {
   const context = useContext(BroadcastContext);
   
   if (!context) {
-    throw new Error('useBroadcast must be used within a BroadcastProvider');
+    throw new Error('useBroadcast must be used within a BroadcastSocketProvider');
   }
 
   return {

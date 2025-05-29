@@ -7,17 +7,17 @@ import { useBroadcastSocket } from './hooks';
 
 export const BroadcastContext = createContext<BroadcastContextValue | null>(null);
 
-export interface BroadcastProviderProps {
+export interface BroadcastSocketProviderProps {
   url: string;
   options?: BroadcastSocketOptions;
   children: ReactNode;
 }
 
-export function BroadcastProvider({ 
+export function BroadcastSocketProvider({ 
   url, 
   options = {}, 
   children 
-}: BroadcastProviderProps): React.ReactElement {
+}: BroadcastSocketProviderProps): React.ReactElement {
   const { 
     state, 
     send, 
@@ -48,7 +48,7 @@ export function useBroadcastContext(): BroadcastContextValue {
   const context = useContext(BroadcastContext);
   
   if (!context) {
-    throw new Error('useBroadcastContext must be used within a BroadcastProvider');
+    throw new Error('useBroadcastContext must be used within a BroadcastSocketProvider');
   }
   
   return context;

@@ -7,7 +7,7 @@ export {
 
 // Context
 export { 
-  BroadcastProvider, 
+  BroadcastSocketProvider, 
   BroadcastContext, 
   useBroadcastContext 
 } from './context';

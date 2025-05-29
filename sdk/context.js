@@ -34,12 +34,12 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BroadcastContext = void 0;
-exports.BroadcastProvider = BroadcastProvider;
+exports.BroadcastSocketProvider = BroadcastSocketProvider;
 exports.useBroadcastContext = useBroadcastContext;
 const react_1 = __importStar(require("react"));
 const hooks_1 = require("./hooks");
 exports.BroadcastContext = (0, react_1.createContext)(null);
-function BroadcastProvider({ url, options = {}, children }) {
+function BroadcastSocketProvider({ url, options = {}, children }) {
     const { state, send, subscribe, unsubscribe, broadcast, addMessageListener } = (0, hooks_1.useBroadcastSocket)(url, options);
     const contextValue = {
         socket: null,
@@ -55,7 +55,7 @@ function BroadcastProvider({ url, options = {}, children }) {
 function useBroadcastContext() {
     const context = (0, react_1.useContext)(exports.BroadcastContext);
     if (!context) {
-        throw new Error('useBroadcastContext must be used within a BroadcastProvider');
+        throw new Error('useBroadcastContext must be used within a BroadcastSocketProvider');
     }
     return context;
 }
