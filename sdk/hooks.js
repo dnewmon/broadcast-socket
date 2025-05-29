@@ -1,10 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.useBroadcastSocket = useBroadcastSocket;
-exports.useSubscription = useSubscription;
-exports.useBroadcast = useBroadcast;
-const react_1 = require("react");
-const context_1 = require("./context");
+import { useState, useEffect, useRef, useCallback, useContext } from 'react';
+import { BroadcastContext } from './context';
 const DEFAULT_OPTIONS = {
     reconnect: true,
     reconnectAttempts: 5,
@@ -13,30 +8,30 @@ const DEFAULT_OPTIONS = {
     messageQueueSize: 100,
     debug: false
 };
-function useBroadcastSocket(url, options = {}) {
+export function useBroadcastSocket(url, options = {}) {
     const config = { ...DEFAULT_OPTIONS, ...options };
-    const [state, setState] = (0, react_1.useState)({
+    const [state, setState] = useState({
         connected: false,
         connecting: false,
         error: null,
         reconnectAttempt: 0,
         lastConnected: null
     });
-    const socketRef = (0, react_1.useRef)(null);
-    const reconnectTimeoutRef = (0, react_1.useRef)(null);
-    const heartbeatIntervalRef = (0, react_1.useRef)(null);
-    const messageQueueRef = (0, react_1.useRef)([]);
-    const pendingMessagesRef = (0, react_1.useRef)(new Map());
-    const messageListenersRef = (0, react_1.useRef)(new Set());
-    const log = (0, react_1.useCallback)((message, ...args) => {
+    const socketRef = useRef(null);
+    const reconnectTimeoutRef = useRef(null);
+    const heartbeatIntervalRef = useRef(null);
+    const messageQueueRef = useRef([]);
+    const pendingMessagesRef = useRef(new Map());
+    const messageListenersRef = useRef(new Set());
+    const log = useCallback((message, ...args) => {
         if (config.debug) {
             console.log(`[BroadcastSocket] ${message}`, ...args);
         }
     }, [config.debug]);
-    const generateMessageId = (0, react_1.useCallback)(() => {
+    const generateMessageId = useCallback(() => {
         return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     }, []);
-    const send = (0, react_1.useCallback)(async (message) => {
+    const send = useCallback(async (message) => {
         return new Promise((resolve, reject) => {
             const messageWithId = {
                 ...message,
@@ -75,7 +70,7 @@ function useBroadcastSocket(url, options = {}) {
             }
         });
     }, [state.connected, config.messageQueueSize, log, generateMessageId]);
-    const flushMessageQueue = (0, react_1.useCallback)(() => {
+    const flushMessageQueue = useCallback(() => {
         const queue = messageQueueRef.current.splice(0);
         log(`Flushing ${queue.length} queued messages`);
         queue.forEach((message) => {
@@ -84,7 +79,7 @@ function useBroadcastSocket(url, options = {}) {
             });
         });
     }, [send, log]);
-    const connect = (0, react_1.useCallback)(() => {
+    const connect = useCallback(() => {
         if (state.connecting || state.connected) {
             return;
         }
@@ -142,7 +137,7 @@ function useBroadcastSocket(url, options = {}) {
             }));
         }
     }, [url, state.connecting, state.connected, state.reconnectAttempt, config.reconnect, config.reconnectAttempts, log]);
-    const disconnect = (0, react_1.useCallback)(() => {
+    const disconnect = useCallback(() => {
         log('Disconnecting');
         cleanup();
         if (socketRef.current) {
@@ -157,7 +152,7 @@ function useBroadcastSocket(url, options = {}) {
             reconnectAttempt: 0
         }));
     }, [log]);
-    const cleanup = (0, react_1.useCallback)(() => {
+    const cleanup = useCallback(() => {
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
@@ -167,7 +162,7 @@ function useBroadcastSocket(url, options = {}) {
             heartbeatIntervalRef.current = null;
         }
     }, []);
-    const scheduleReconnect = (0, react_1.useCallback)(() => {
+    const scheduleReconnect = useCallback(() => {
         if (reconnectTimeoutRef.current) {
             return;
         }
@@ -179,7 +174,7 @@ function useBroadcastSocket(url, options = {}) {
             connect();
         }, delay);
     }, [config.reconnectInterval, config.reconnectAttempts, state.reconnectAttempt, log, connect]);
-    const setupHeartbeat = (0, react_1.useCallback)(() => {
+    const setupHeartbeat = useCallback(() => {
         if (heartbeatIntervalRef.current) {
             clearInterval(heartbeatIntervalRef.current);
         }
@@ -189,7 +184,7 @@ function useBroadcastSocket(url, options = {}) {
             }
         }, config.heartbeatInterval);
     }, [config.heartbeatInterval]);
-    const handleMessage = (0, react_1.useCallback)((message) => {
+    const handleMessage = useCallback((message) => {
         log('Received message:', message);
         if (message.type === 'ack' && message.messageId) {
             const resolver = pendingMessagesRef.current.get(message.messageId);
@@ -207,26 +202,26 @@ function useBroadcastSocket(url, options = {}) {
             }
         });
     }, [log]);
-    const addMessageListener = (0, react_1.useCallback)((listener) => {
+    const addMessageListener = useCallback((listener) => {
         messageListenersRef.current.add(listener);
         return () => {
             messageListenersRef.current.delete(listener);
         };
     }, []);
-    const subscribe = (0, react_1.useCallback)(async (channel) => {
+    const subscribe = useCallback(async (channel) => {
         return send({ type: 'subscribe', channel });
     }, [send]);
-    const unsubscribe = (0, react_1.useCallback)(async (channel) => {
+    const unsubscribe = useCallback(async (channel) => {
         return send({ type: 'unsubscribe', channel });
     }, [send]);
-    const broadcast = (0, react_1.useCallback)(async (channel, data) => {
+    const broadcast = useCallback(async (channel, data) => {
         return send({ type: 'broadcast', channel, data });
     }, [send]);
-    const reconnect = (0, react_1.useCallback)(() => {
+    const reconnect = useCallback(() => {
         setState((prev) => ({ ...prev, reconnectAttempt: 0 }));
         connect();
     }, [connect]);
-    (0, react_1.useEffect)(() => {
+    useEffect(() => {
         connect();
         return () => {
             cleanup();
@@ -244,12 +239,12 @@ function useBroadcastSocket(url, options = {}) {
         addMessageListener
     };
 }
-function useSubscription(channel) {
-    const context = (0, react_1.useContext)(context_1.BroadcastContext);
+export function useSubscription(channel) {
+    const context = useContext(BroadcastContext);
     if (!context) {
         throw new Error('useSubscription must be used within a BroadcastSocketProvider');
     }
-    const [subscriptionState, setSubscriptionState] = (0, react_1.useState)({
+    const [subscriptionState, setSubscriptionState] = useState({
         channel,
         subscribed: false,
         subscribing: false,
@@ -257,9 +252,9 @@ function useSubscription(channel) {
         messageCount: 0,
         lastMessage: null
     });
-    const [messages, setMessages] = (0, react_1.useState)([]);
-    const channelListenersRef = (0, react_1.useRef)(new Set());
-    const subscribe = (0, react_1.useCallback)(async () => {
+    const [messages, setMessages] = useState([]);
+    const channelListenersRef = useRef(new Set());
+    const subscribe = useCallback(async () => {
         setSubscriptionState((prev) => ({ ...prev, subscribing: true, error: null }));
         try {
             await context.subscribe(channel);
@@ -277,7 +272,7 @@ function useSubscription(channel) {
             }));
         }
     }, [context, channel]);
-    const unsubscribe = (0, react_1.useCallback)(async () => {
+    const unsubscribe = useCallback(async () => {
         try {
             await context.unsubscribe(channel);
             setSubscriptionState((prev) => ({
@@ -293,7 +288,7 @@ function useSubscription(channel) {
             }));
         }
     }, [context, channel]);
-    const clearMessages = (0, react_1.useCallback)(() => {
+    const clearMessages = useCallback(() => {
         setMessages([]);
         setSubscriptionState((prev) => ({
             ...prev,
@@ -301,13 +296,13 @@ function useSubscription(channel) {
             lastMessage: null
         }));
     }, []);
-    const addMessageListener = (0, react_1.useCallback)((listener) => {
+    const addMessageListener = useCallback((listener) => {
         channelListenersRef.current.add(listener);
         return () => {
             channelListenersRef.current.delete(listener);
         };
     }, []);
-    (0, react_1.useEffect)(() => {
+    useEffect(() => {
         const handleMessage = (message) => {
             if (message.channel === channel && message.type === 'message') {
                 setMessages((prev) => [...prev, message].slice(-100));
@@ -338,8 +333,8 @@ function useSubscription(channel) {
         addMessageListener
     };
 }
-function useBroadcast() {
-    const context = (0, react_1.useContext)(context_1.BroadcastContext);
+export function useBroadcast() {
+    const context = useContext(BroadcastContext);
     if (!context) {
         throw new Error('useBroadcast must be used within a BroadcastSocketProvider');
     }
