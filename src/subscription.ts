@@ -1,5 +1,5 @@
-import { SubscriptionState } from './types';
-import { RedisManager } from './redis';
+import { SubscriptionState } from './types.js';
+import { RedisManager } from './redis.js';
 
 export class SubscriptionManager {
   private subscriptions: Map<string, Set<string>> = new Map();

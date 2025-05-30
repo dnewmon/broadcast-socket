@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
-import { BroadcastMessage, ServerMessage, Client } from './types';
-import { RedisManager } from './redis';
-import { SubscriptionManager } from './subscription';
+import { BroadcastMessage, ServerMessage, Client } from './types.js';
+import { RedisManager } from './redis.js';
+import { SubscriptionManager } from './subscription.js';
 
 export class BroadcastManager {
   private redis: RedisManager;

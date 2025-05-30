@@ -1,8 +1,37 @@
 #!/usr/bin/env node
 
-import { BroadcastServer } from '../dist/server.js';
-import { ClusterManager } from '../dist/cluster.js';
-import { logWithTimestamp } from '../dist/utils.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync } from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Check if we're in development mode (src/ directory exists)
+const srcPath = join(__dirname, '..', 'src');
+const isDevelopment = existsSync(srcPath);
+
+let BroadcastServer, ClusterManager, logWithTimestamp;
+
+if (isDevelopment) {
+  // Development: import from built dist files (after npm run build)
+  const serverModule = await import('../dist/server.js');
+  const clusterModule = await import('../dist/cluster.js');
+  const utilsModule = await import('../dist/utils.js');
+  
+  BroadcastServer = serverModule.BroadcastServer;
+  ClusterManager = clusterModule.ClusterManager;
+  logWithTimestamp = utilsModule.logWithTimestamp;
+} else {
+  // Production: import from published package
+  const serverModule = await import('broadcast-socket/dist/server.js');
+  const clusterModule = await import('broadcast-socket/dist/cluster.js');
+  const utilsModule = await import('broadcast-socket/dist/utils.js');
+  
+  BroadcastServer = serverModule.BroadcastServer;
+  ClusterManager = clusterModule.ClusterManager;
+  logWithTimestamp = utilsModule.logWithTimestamp;
+}
 
 function printUsage() {
   console.log(`
@@ -156,4 +185,4 @@ async function main() {
   }
 }
 
-main();
+main().catch(console.error);

@@ -1,7 +1,7 @@
 import cluster from 'cluster';
-import { BroadcastServer } from './server';
-import { getServerConfig, logWithTimestamp } from './utils';
-import { ClusterMessage, WorkerStatsData } from './types';
+import { BroadcastServer } from './server.js';
+import { getServerConfig, logWithTimestamp } from './utils.js';
+import { ClusterMessage, WorkerStatsData } from './types.js';
 
 export class ClusterManager {
   private config = getServerConfig();
@@ -255,7 +255,3 @@ export class WorkerBroadcastBridge {
   }
 }
 
-if (require.main === module) {
-  const clusterManager = new ClusterManager();
-  clusterManager.start();
-}
