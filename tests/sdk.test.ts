@@ -3,7 +3,7 @@
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useBroadcastSocket } from '../sdk/hooks';
+import { useBroadcastSocket } from '../sdk-src/hooks';
 
 // Mock WebSocket
 class MockWebSocket {

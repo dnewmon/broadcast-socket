@@ -5,7 +5,7 @@
     "module": "ES2020",
     "lib": ["ES2020", "DOM"],
     "outDir": "./sdk",
-    "rootDir": "./sdk",
+    "rootDir": "./sdk-src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -29,15 +29,12 @@
     "types": ["react", "node"]
   },
   "include": [
-    "sdk/**/*.ts"
+    "sdk-src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "tests",
-    "src",
-    "sdk/**/*.js",
-    "sdk/**/*.d.ts",
-    "sdk/**/*.map"
+    "src"
   ]
 }
