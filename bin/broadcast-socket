@@ -1,0 +1,159 @@
+#!/usr/bin/env node
+
+import { BroadcastServer } from '../dist/server.js';
+import { ClusterManager } from '../dist/cluster.js';
+import { logWithTimestamp } from '../dist/utils.js';
+
+function printUsage() {
+  console.log(`
+Usage: broadcast-socket [options]
+
+Options:
+  --port <number>              Port to run the server on (default: 8080)
+  --cors-origin <string>       CORS origin (default: '*')
+  --redis-url <string>         Redis connection URL (default: 'redis://localhost:6379')
+  --workers <number>           Number of worker processes (default: CPU count)
+  --ping-interval <number>     Ping interval in milliseconds (default: 30000)
+  --heartbeat-timeout <number> Heartbeat timeout in milliseconds (default: 60000)
+  --cluster                    Run in cluster mode
+  --help, -h                   Show this help message
+
+Environment Variables:
+  PORT                         Port to run the server on
+  CORS_ORIGIN                  CORS origin
+  REDIS_URL                    Redis connection URL
+  WORKERS                      Number of worker processes
+  PING_INTERVAL                Ping interval in milliseconds
+  HEARTBEAT_TIMEOUT            Heartbeat timeout in milliseconds
+
+Examples:
+  broadcast-socket --port 3000 --redis-url redis://localhost:6380
+  broadcast-socket --cluster --workers 4
+  PORT=3000 REDIS_URL=redis://localhost:6380 broadcast-socket
+`);
+}
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const options = {};
+  let useCluster = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '--help' || arg === '-h') {
+      printUsage();
+      process.exit(0);
+    }
+    
+    if (arg === '--cluster') {
+      useCluster = true;
+      continue;
+    }
+    
+    if (arg.startsWith('--') && i + 1 < args.length) {
+      const key = arg.slice(2);
+      const value = args[i + 1];
+      
+      switch (key) {
+        case 'port':
+          const port = parseInt(value, 10);
+          if (isNaN(port) || port < 1 || port > 65535) {
+            console.error(`Error: Invalid port number: ${value}`);
+            process.exit(1);
+          }
+          process.env.PORT = value;
+          break;
+          
+        case 'cors-origin':
+          process.env.CORS_ORIGIN = value;
+          break;
+          
+        case 'redis-url':
+          process.env.REDIS_URL = value;
+          break;
+          
+        case 'workers':
+          const workers = parseInt(value, 10);
+          if (isNaN(workers) || workers < 1) {
+            console.error(`Error: Invalid workers count: ${value}`);
+            process.exit(1);
+          }
+          process.env.WORKERS = value;
+          break;
+          
+        case 'ping-interval':
+          const pingInterval = parseInt(value, 10);
+          if (isNaN(pingInterval) || pingInterval < 1000) {
+            console.error(`Error: Invalid ping interval: ${value} (minimum 1000ms)`);
+            process.exit(1);
+          }
+          process.env.PING_INTERVAL = value;
+          break;
+          
+        case 'heartbeat-timeout':
+          const heartbeatTimeout = parseInt(value, 10);
+          if (isNaN(heartbeatTimeout) || heartbeatTimeout < 1000) {
+            console.error(`Error: Invalid heartbeat timeout: ${value} (minimum 1000ms)`);
+            process.exit(1);
+          }
+          process.env.HEARTBEAT_TIMEOUT = value;
+          break;
+          
+        default:
+          console.error(`Error: Unknown option: ${arg}`);
+          printUsage();
+          process.exit(1);
+      }
+      
+      i++; // Skip the value we just processed
+    } else if (arg.startsWith('--')) {
+      console.error(`Error: Option ${arg} requires a value`);
+      printUsage();
+      process.exit(1);
+    } else {
+      console.error(`Error: Unknown argument: ${arg}`);
+      printUsage();
+      process.exit(1);
+    }
+  }
+  
+  return { useCluster };
+}
+
+async function main() {
+  try {
+    const { useCluster } = parseArgs();
+    
+    logWithTimestamp('info', 'Starting Broadcast Socket Server...');
+    
+    if (useCluster) {
+      logWithTimestamp('info', 'Running in cluster mode');
+      const clusterManager = new ClusterManager();
+      await clusterManager.start();
+    } else {
+      logWithTimestamp('info', 'Running in single process mode');
+      const server = new BroadcastServer();
+      
+      // Handle graceful shutdown
+      process.on('SIGINT', async () => {
+        logWithTimestamp('info', 'Received SIGINT, shutting down gracefully...');
+        await server.stop();
+        process.exit(0);
+      });
+
+      process.on('SIGTERM', async () => {
+        logWithTimestamp('info', 'Received SIGTERM, shutting down gracefully...');
+        await server.stop();
+        process.exit(0);
+      });
+
+      await server.start();
+    }
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+main();

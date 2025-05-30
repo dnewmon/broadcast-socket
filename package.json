@@ -4,6 +4,9 @@
   "description": "A horizontally scalable WebSocket broadcasting service",
   "main": "dist/server.js",
   "type": "module",
+  "bin": {
+    "broadcast-socket": "bin/broadcast-socket"
+  },
   "scripts": {
     "dev": "./scripts/dev.sh",
     "build": "npm run build:server && npm run build:sdk",
