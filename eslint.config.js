@@ -41,8 +41,8 @@ export default [
     },
   },
   {
-    files: ['sdk/**/*.ts'],
-    ignores: ['sdk/**/*.d.ts'],
+    files: ['sdk-src/**/*.ts'],
+    ignores: ['sdk-src/**/*.d.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

@@ -374,7 +374,7 @@ export class BroadcastServer {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.env.NODE_ENV !== 'test' && process.argv[1] && process.argv[1].endsWith('server.js')) {
   const server = new BroadcastServer();
   
   process.on('SIGINT', async () => {

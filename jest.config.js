@@ -16,7 +16,7 @@ export default {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
       tsconfig: {
-        module: 'esnext',
+        module: 'ES2022',
         target: 'ES2022',
         lib: ['ES2022']
       }

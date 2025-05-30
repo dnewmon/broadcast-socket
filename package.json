@@ -13,7 +13,7 @@
     "test": "jest",
     "lint": "npm run lint:src && npm run lint:sdk",
     "lint:src": "eslint src/**/*.ts",
-    "lint:sdk": "eslint sdk/**/*.ts",
+    "lint:sdk": "eslint sdk-src/**/*.ts",
     "typecheck": "npm run typecheck:src && npm run typecheck:sdk",
     "typecheck:src": "tsc --noEmit",
     "typecheck:sdk": "tsc --noEmit -p tsconfig.sdk.json"
