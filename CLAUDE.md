@@ -1,179 +1,137 @@
-# Broadcast Socket Service Plan
+# Broadcast Socket Service
 
 ## Architecture Overview
 
-A horizontally scalable WebSocket broadcasting service built with Node.js that supports fan-out messaging patterns with CORS-enabled connections.
+A real-time WebSocket broadcasting service built with Node.js and TypeScript that enables scalable fan-out messaging with Redis-backed persistence and React client SDK.
 
 ## Technology Stack
 
-- **Runtime**: Node.js with TypeScript
-- **WebSocket**: `ws` library for WebSocket server
-- **Process Management**: Node.js Cluster module for multi-processing
-- **Message Broker**: Redis for inter-process communication and message persistence
-- **Framework**: Express.js for HTTP endpoints and health checks
-- **CORS**: `cors` middleware for cross-origin support
-- **Containerization**: Docker with multi-stage builds
+- **Runtime**: Node.js 22+ with TypeScript (ESM modules)
+- **WebSocket**: `ws` library for WebSocket server implementation
+- **Process Management**: Node.js Cluster module for horizontal scaling
+- **Message Broker**: Redis for pub/sub and message persistence
+- **HTTP Framework**: Express.js for REST endpoints and health checks
+- **CORS**: Cross-origin request support with configurable origins
+- **Client SDK**: React hooks and context providers
 
 ## Core Components
 
 ### 1. WebSocket Server (`src/server.ts`)
-- CORS-enabled WebSocket server using `ws` library
-- Connection management with unique client IDs
-- Heartbeat/ping-pong for connection health
-- Graceful shutdown handling
+- Main BroadcastServer class with WebSocket and HTTP servers
+- Client connection management with unique IDs and heartbeat monitoring
+- Message validation, rate limiting, and error handling
+- HTTP endpoints: `/health`, `/stats`, `/broadcast` (POST)
+- Graceful shutdown with proper cleanup
 
-### 2. Message Broadcasting System (`src/broadcast.ts`)
-- Fan-out message distribution to all connected clients
-- Message persistence in Redis for reliability
-- Support for targeted broadcasts (channels/topics)
-- Message deduplication and ordering
+### 2. Broadcasting System (`src/broadcast.ts`)
+- BroadcastManager handles message distribution and queuing
+- Redis pub/sub for cross-process message routing
+- Message deduplication and delivery guarantees
+- Failed message queuing and retry mechanism
+- Support for channel-specific and global broadcasts
 
 ### 3. Subscription Management (`src/subscription.ts`)
-- Channel-based subscription system
-- Client subscription state tracking
-- Dynamic subscription/unsubscription
-- Subscription persistence across reconnections
+- Channel-based subscription tracking with Redis persistence
+- Client subscription state management and restoration
+- Dynamic subscription/unsubscription with cleanup
+- Channel statistics and subscriber tracking
 
-### 4. Multi-Processing Architecture (`src/cluster.ts`)
-- Node.js Cluster module for worker processes
-- Redis pub/sub for inter-worker communication
-- Sticky session support for WebSocket connections
-- Load balancing across worker processes
+### 4. Cluster Management (`src/cluster.ts`)
+- Multi-worker process management with automatic restart
+- Inter-worker communication via cluster messaging
+- Worker health monitoring and statistics collection
+- Graceful cluster shutdown coordination
 
-### 5. React SDK (`sdk/index.ts`)
-- TypeScript-first React hooks and context providers
-- Automatic reconnection with exponential backoff
-- Message queuing during disconnections
-- React-friendly state management
+### 5. React SDK (`sdk/`)
+- TypeScript hooks: `useBroadcastSocket`, `useSubscription`, `useBroadcast`
+- Context provider for shared connection state
+- Automatic reconnection and message queuing
+- Type-safe message handling
 
-## Project Structure
+## Key Features
 
-```
-/
-├── src/
-│   ├── server.ts           # Main WebSocket server
-│   ├── cluster.ts          # Multi-processing setup
-│   ├── broadcast.ts        # Broadcasting logic
-│   ├── subscription.ts     # Subscription management
-│   ├── redis.ts           # Redis client configuration
-│   ├── types.ts           # TypeScript type definitions
-│   └── utils.ts           # Utility functions
-├── sdk/
-│   ├── index.ts           # React SDK entry point
-│   ├── hooks.ts           # React hooks
-│   ├── context.ts         # React context providers
-│   └── types.ts           # SDK type definitions
-├── tests/
-│   ├── server.test.ts     # Server tests
-│   ├── broadcast.test.ts  # Broadcasting tests
-│   └── sdk.test.ts        # SDK tests
-├── Dockerfile             # Container configuration
-├── docker-compose.yml     # Development environment
-├── package.json           # Dependencies and scripts
-├── tsconfig.json          # TypeScript configuration
-└── README.md             # Usage documentation
-```
+### Message Broadcasting
+- Real-time message distribution to all connected clients
+- Channel-based subscriptions for targeted messaging  
+- Global broadcasts to all clients (`channel: "*"`)
+- Message persistence in Redis with TTL
+- Deduplication to prevent duplicate message delivery
 
-## API Design
+### Connection Management
+- Unique client IDs with WebSocket connection tracking
+- Heartbeat monitoring with ping/pong for health checks
+- Rate limiting (100 messages per minute per IP)
+- Automatic reconnection support in React SDK
+- Graceful handling of client disconnections
 
-### WebSocket Messages
+### Scalability
+- Multi-worker cluster mode for CPU utilization
+- Redis pub/sub for cross-worker message distribution
+- Subscription state persistence for reconnections
+- Message queuing for offline/reconnecting clients
+- Horizontal scaling support with stateless workers
 
+### Developer Experience
+- TypeScript-first with comprehensive type definitions
+- ESM module support (Node.js 22+)
+- React hooks for easy frontend integration
+- HTTP API for server-side message broadcasting
+- Comprehensive logging and debugging output
+
+## API Reference
+
+### WebSocket Protocol
 ```typescript
 // Client -> Server
-interface ClientMessage {
-  type: 'subscribe' | 'unsubscribe' | 'broadcast';
-  channel?: string;
-  data?: any;
-  messageId?: string;
+{
+  type: 'subscribe' | 'unsubscribe' | 'broadcast',
+  channel?: string,
+  data?: unknown,
+  messageId?: string
 }
 
-// Server -> Client
-interface ServerMessage {
-  type: 'message' | 'ack' | 'error' | 'ping';
-  channel?: string;
-  data?: any;
-  messageId?: string;
-  timestamp: number;
+// Server -> Client  
+{
+  type: 'message' | 'ack' | 'error' | 'ping',
+  channel?: string,
+  data?: unknown,
+  messageId?: string,
+  timestamp: number
 }
 ```
 
 ### HTTP Endpoints
+- `GET /health` - Health status and connection count
+- `GET /stats` - Server statistics and channel info
+- `POST /broadcast` - Send message to channel via HTTP
 
-- `GET /health` - Health check endpoint
-- `POST /broadcast` - HTTP-based broadcasting
-- `GET /stats` - Connection and performance statistics
-
-## React SDK Features
-
-### Hooks
-- `useBroadcastSocket(url, options)` - Main connection hook
-- `useSubscription(channel)` - Channel subscription management
-- `useBroadcast()` - Message broadcasting utilities
-
-### Context Provider
+### React SDK
 ```typescript
-<BroadcastProvider url="ws://localhost:8080">
+// Hooks
+useBroadcastSocket(url, options)  // Main connection
+useSubscription(channel)          // Subscribe to channel
+useBroadcast()                   // Send messages
+
+// Context
+<BroadcastSocketProvider url="ws://localhost:8080">
   <App />
-</BroadcastProvider>
+</BroadcastSocketProvider>
 ```
 
-## Horizontal Scaling Strategy
-
-### Process-Level Scaling
-- Node.js Cluster with worker processes (CPU cores)
-- Redis pub/sub for inter-process message routing
-- Shared connection state in Redis
-
-### Container-Level Scaling
-- Stateless worker containers
-- Redis cluster for message persistence
-- Load balancer with sticky sessions (optional)
-- Health checks for container orchestration
-
-### Message Delivery Guarantees
-- At-least-once delivery for persistent channels
-- Message acknowledgments for reliability
-- Automatic retry with exponential backoff
-
-## Deployment Configuration
-
-### Dockerfile Features
-- Multi-stage build (build + runtime)
-- Non-root user for security
-- Health check integration
-- Optimized for production
+## Configuration
 
 ### Environment Variables
-- `PORT` - WebSocket server port (default: 8080)
-- `REDIS_URL` - Redis connection string
-- `CORS_ORIGIN` - CORS allowed origins (default: *)
-- `WORKERS` - Number of worker processes (default: CPU cores)
-- `NODE_ENV` - Environment (development/production)
+- `PORT=8080` - Server port
+- `REDIS_URL=redis://localhost:6379` - Redis connection
+- `CORS_ORIGIN=*` - CORS allowed origins  
+- `WORKERS=<CPU cores>` - Cluster worker count
+- `NODE_ENV=development` - Environment mode
 
-## Development Commands
-
+### Development Scripts
 ```bash
-npm run dev          # Start development server
-npm run build        # Build TypeScript
-npm run test         # Run test suite
-npm run lint         # Code linting
-npm start           # Start production server
-docker build .      # Build container
-docker-compose up   # Start with Redis
+npm run dev          # Development server with auto-reload
+npm run build        # TypeScript compilation (server + SDK)
+npm run test         # Jest test suite
+npm run lint         # ESLint + TypeScript checks
+npm start           # Production server
 ```
-
-## Performance Considerations
-
-- Connection pooling and reuse
-- Message batching for high throughput
-- Memory-efficient client tracking
-- Redis connection optimization
-- Graceful degradation under load
-
-## Security Features
-
-- Input validation and sanitization
-- Rate limiting per connection
-- CORS configuration
-- WebSocket origin validation
-- No sensitive data in logs
