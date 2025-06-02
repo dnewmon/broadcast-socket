@@ -2,7 +2,7 @@ import { SubscriptionState } from './types.js';
 import { RedisManager } from './redis.js';
 
 export class SubscriptionManager {
-  private subscriptions: Map<string, Set<string>> = new Map();
+  private channelSubscriptions: Map<string, Set<string>> = new Map();
   private clientSubscriptions: Map<string, Set<string>> = new Map();
   private redis: RedisManager;
 
@@ -13,9 +13,9 @@ export class SubscriptionManager {
   async subscribeClient(clientId: string, channel: string): Promise<boolean> {
     console.log(`[SUBSCRIPTION] Attempting to subscribe client ${clientId} to channel: ${channel}`);
     
-    if (!this.subscriptions.has(channel)) {
+    if (!this.channelSubscriptions.has(channel)) {
       console.log(`[SUBSCRIPTION] Creating new channel: ${channel}`);
-      this.subscriptions.set(channel, new Set());
+      this.channelSubscriptions.set(channel, new Set());
     }
 
     if (!this.clientSubscriptions.has(clientId)) {
@@ -23,7 +23,7 @@ export class SubscriptionManager {
       this.clientSubscriptions.set(clientId, new Set());
     }
 
-    const channelSubscribers = this.subscriptions.get(channel)!;
+    const channelSubscribers = this.channelSubscriptions.get(channel)!;
     const clientChannels = this.clientSubscriptions.get(clientId)!;
 
     if (channelSubscribers.has(clientId)) {
@@ -45,7 +45,7 @@ export class SubscriptionManager {
   async unsubscribeClient(clientId: string, channel: string): Promise<boolean> {
     console.log(`[SUBSCRIPTION] Attempting to unsubscribe client ${clientId} from channel: ${channel}`);
     
-    const channelSubscribers = this.subscriptions.get(channel);
+    const channelSubscribers = this.channelSubscriptions.get(channel);
     const clientChannels = this.clientSubscriptions.get(clientId);
 
     if (!channelSubscribers || !clientChannels) {
@@ -65,7 +65,7 @@ export class SubscriptionManager {
 
     if (channelSubscribers.size === 0) {
       console.log(`[SUBSCRIPTION] Channel ${channel} has no more subscribers, removing`);
-      this.subscriptions.delete(channel);
+      this.channelSubscriptions.delete(channel);
     }
 
     if (clientChannels.size === 0) {
@@ -92,12 +92,12 @@ export class SubscriptionManager {
     console.log(`[SUBSCRIPTION] Removing client ${clientId} from ${unsubscribedChannels.length} channels: [${unsubscribedChannels.join(', ')}]`);
 
     for (const channel of clientChannels) {
-      const channelSubscribers = this.subscriptions.get(channel);
+      const channelSubscribers = this.channelSubscriptions.get(channel);
       if (channelSubscribers) {
         channelSubscribers.delete(clientId);
         if (channelSubscribers.size === 0) {
           console.log(`[SUBSCRIPTION] Channel ${channel} now empty, removing`);
-          this.subscriptions.delete(channel);
+          this.channelSubscriptions.delete(channel);
         }
       }
     }
@@ -110,7 +110,7 @@ export class SubscriptionManager {
   }
 
   getChannelSubscribers(channel: string): string[] {
-    const subscribers = this.subscriptions.get(channel);
+    const subscribers = this.channelSubscriptions.get(channel);
     const result = subscribers ? Array.from(subscribers) : [];
     console.log(`[SUBSCRIPTION] Channel ${channel} has ${result.length} subscribers: [${result.join(', ')}]`);
     return result;
@@ -127,16 +127,16 @@ export class SubscriptionManager {
   }
 
   getAllChannels(): string[] {
-    return Array.from(this.subscriptions.keys());
+    return Array.from(this.channelSubscriptions.keys());
   }
 
   getChannelCount(): number {
-    return this.subscriptions.size;
+    return this.channelSubscriptions.size;
   }
 
   getTotalSubscriptions(): number {
     let total = 0;
-    for (const subscribers of this.subscriptions.values()) {
+    for (const subscribers of this.channelSubscriptions.values()) {
       total += subscribers.size;
     }
     return total;
@@ -144,7 +144,7 @@ export class SubscriptionManager {
 
   getChannelStats(): Record<string, number> {
     const stats: Record<string, number> = {};
-    for (const [channel, subscribers] of this.subscriptions.entries()) {
+    for (const [channel, subscribers] of this.channelSubscriptions.entries()) {
       stats[channel] = subscribers.size;
     }
     return stats;
