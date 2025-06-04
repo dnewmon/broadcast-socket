@@ -1,7 +1,7 @@
 import { SubscriptionState } from './types.js';
 import { RedisManager } from './redis.js';
 export declare class SubscriptionManager {
-    private subscriptions;
+    private channelSubscriptions;
     private clientSubscriptions;
     private redis;
     constructor(redis: RedisManager);
