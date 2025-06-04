@@ -81,7 +81,7 @@ Examples:
 `);
 }
 
-function parseArgs() {
+function parseCommandLineArgs() {
   const {
     values,
     positionals,
@@ -196,7 +196,7 @@ async function testRedisConnection() {
 
 async function main() {
   try {
-    const { useCluster } = parseArgs();
+    const { useCluster } = parseCommandLineArgs();
 
     logWithTimestamp('info', 'Starting Broadcast Socket Server...');
 
