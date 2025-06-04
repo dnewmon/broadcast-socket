@@ -11,26 +11,30 @@ const __dirname = dirname(__filename);
 const srcPath = join(__dirname, '..', 'src');
 const isDevelopment = existsSync(srcPath);
 
-let BroadcastServer, ClusterManager, logWithTimestamp;
+let BroadcastServer, ClusterManager, logWithTimestamp, RedisManager;
 
 if (isDevelopment) {
   // Development: import from built dist files (after npm run build)
   const serverModule = await import('../dist/server.js');
   const clusterModule = await import('../dist/cluster.js');
   const utilsModule = await import('../dist/utils.js');
+  const redisModule = await import('../dist/redis.js');
   
   BroadcastServer = serverModule.BroadcastServer;
   ClusterManager = clusterModule.ClusterManager;
   logWithTimestamp = utilsModule.logWithTimestamp;
+  RedisManager = redisModule.RedisManager;
 } else {
   // Production: import from published package
   const serverModule = await import('broadcast-socket/dist/server.js');
   const clusterModule = await import('broadcast-socket/dist/cluster.js');
   const utilsModule = await import('broadcast-socket/dist/utils.js');
+  const redisModule = await import('broadcast-socket/dist/redis.js');
   
   BroadcastServer = serverModule.BroadcastServer;
   ClusterManager = clusterModule.ClusterManager;
   logWithTimestamp = utilsModule.logWithTimestamp;
+  RedisManager = redisModule.RedisManager;
 }
 
 function printUsage() {
@@ -150,6 +154,37 @@ function parseArgs() {
   return { useCluster };
 }
 
+async function testRedisConnection() {
+  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+  logWithTimestamp('info', `Testing Redis connection to ${redisUrl}...`);
+  
+  const redis = new RedisManager(redisUrl);
+  
+  try {
+    // Set a timeout for the connection test
+    const connectPromise = redis.connect();
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Connection timeout after 5 seconds'));
+      }, 5000);
+    });
+    
+    await Promise.race([connectPromise, timeoutPromise]);
+    logWithTimestamp('info', 'Redis connection test successful');
+    await redis.disconnect();
+  } catch (error) {
+    try {
+      await redis.disconnect();
+    } catch (disconnectError) {
+      // Ignore disconnect errors
+    }
+    console.error(`Error: Failed to connect to Redis at ${redisUrl}`);
+    console.error(`Redis is required for cluster mode. Please ensure Redis is running and accessible.`);
+    console.error(`Error details: ${error.message}`);
+    process.exit(1);
+  }
+}
+
 async function main() {
   try {
     const { useCluster } = parseArgs();
@@ -158,6 +193,7 @@ async function main() {
     
     if (useCluster) {
       logWithTimestamp('info', 'Running in cluster mode');
+      await testRedisConnection();
       const clusterManager = new ClusterManager();
       await clusterManager.start();
     } else {

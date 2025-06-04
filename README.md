@@ -2,6 +2,43 @@
 
 A horizontally scalable WebSocket broadcasting service built with Node.js that supports fan-out messaging patterns with CORS-enabled connections.
 
+## Table of Contents
+
+- [Features & Functionality](#features--functionality)
+  - [Core Features](#core-features)
+  - [WebSocket Message Types](#websocket-message-types)
+  - [HTTP Endpoints](#http-endpoints)
+  - [HTTP Broadcasting](#http-broadcasting)
+- [Requirements](#requirements)
+  - [System Requirements](#system-requirements)
+  - [Dependencies](#dependencies)
+- [Installation & Usage](#installation--usage)
+  - [Server Installation](#server-installation)
+  - [Environment Configuration](#environment-configuration)
+  - [Local Development with Redis](#local-development-with-redis)
+  - [Running the Server](#running-the-server)
+- [React SDK Usage](#react-sdk-usage)
+  - [Installation](#installation)
+  - [Basic Setup](#basic-setup)
+  - [Using Hooks](#using-hooks)
+  - [useSubscription Hook API](#usesubscription-hook-api)
+  - [Advanced Configuration](#advanced-configuration)
+- [Docker Container](#docker-container)
+  - [Building the Container](#building-the-container)
+  - [Running the Container](#running-the-container)
+  - [Docker Compose Setup](#docker-compose-setup)
+- [Development Commands](#development-commands)
+- [API Reference](#api-reference)
+  - [WebSocket Message Format](#websocket-message-format)
+  - [React SDK Types](#react-sdk-types)
+- [Limitations](#limitations)
+  - [Technical Limitations](#technical-limitations)
+  - [Scaling Limitations](#scaling-limitations)
+  - [Feature Limitations](#feature-limitations)
+  - [Browser Limitations](#browser-limitations)
+- [Performance Considerations](#performance-considerations)
+- [License](#license)
+
 ## Features & Functionality
 
 ### Core Features
@@ -135,6 +172,73 @@ REDIS_URL=redis://localhost:6379  # Redis connection string
 CORS_ORIGIN=*               # CORS allowed origins (comma-separated)
 WORKERS=4                   # Number of worker processes (default: CPU cores)
 NODE_ENV=production         # Environment mode
+```
+
+### Local Development with Redis
+
+For local development, you'll need a Redis server running. The easiest way is to use Docker:
+
+#### Quick Start with Docker
+
+```bash
+# Start Redis in the background
+docker run -d --name redis-dev -p 6379:6379 redis:7-alpine
+
+# Verify Redis is running
+docker ps | grep redis-dev
+
+# Connect to Redis CLI (optional)
+docker exec -it redis-dev redis-cli ping
+# Should return: PONG
+```
+
+#### Stop Redis when done
+
+```bash
+# Stop Redis container
+docker stop redis-dev
+
+# Remove Redis container (optional)
+docker rm redis-dev
+```
+
+#### Using Docker Compose (Recommended)
+
+The project includes a `docker-compose.yml` file that sets up both the application and Redis:
+
+```bash
+# Start both Redis and the application
+docker-compose up
+
+# Start only Redis for development
+docker-compose up redis
+
+# Run in background
+docker-compose up -d redis
+```
+
+#### Alternative: Install Redis Locally
+
+If you prefer to install Redis directly:
+
+**macOS (using Homebrew):**
+```bash
+brew install redis
+brew services start redis
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis-server
+```
+
+**Windows:**
+```bash
+# Using WSL2 with Ubuntu
+sudo apt install redis-server
+sudo service redis-server start
 ```
 
 ### Running the Server
