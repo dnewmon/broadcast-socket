@@ -9,6 +9,7 @@ export declare class BroadcastServer {
     private startTime;
     private config;
     private rateLimiter;
+    private healthCheckInterval;
     constructor();
     private setupExpress;
     private setupWebSocketServer;

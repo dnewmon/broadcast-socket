@@ -17,6 +17,7 @@ export class BroadcastServer {
     startTime = Date.now();
     config = getServerConfig();
     rateLimiter = createRateLimiter(100, 60000);
+    healthCheckInterval = null;
     constructor() {
         this.app = express();
         this.setupExpress();
@@ -267,7 +268,7 @@ export class BroadcastServer {
         });
     }
     setupHealthChecks() {
-        setInterval(() => {
+        this.healthCheckInterval = setInterval(() => {
             this.broadcastManager.retryFailedDeliveries();
         }, 30000);
     }
@@ -298,6 +299,10 @@ export class BroadcastServer {
     }
     async stop() {
         logWithTimestamp('info', 'Shutting down server...');
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval);
+            this.healthCheckInterval = null;
+        }
         this.server.clients.forEach((ws) => {
             ws.close(1001, 'Server shutting down');
         });
