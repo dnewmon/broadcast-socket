@@ -71,7 +71,7 @@ export function validateMessage(message: unknown): { valid: boolean; error?: str
 
 export function getServerConfig(): ServerConfig {
   return {
-    port: parseInt(process.env.PORT || '8080', 10),
+    port: parseInt(process.env.PORT || '12000', 10),
     corsOrigin: process.env.CORS_ORIGIN || '*',
     redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
     workers: parseInt(process.env.WORKERS || '0', 10) || cpus().length,

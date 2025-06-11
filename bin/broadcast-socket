@@ -57,7 +57,7 @@ function printUsage() {
 Usage: broadcast-socket [options]
 
 Options:
-  -p, --port <number>              Port to run the server on (default: 8080)
+  -p, --port <number>              Port to run the server on (default: 12000)
   --cors-origin <string>           CORS origin (default: '*')
   --redis-url <string>             Redis connection URL (default: 'redis://localhost:6379')
   --workers <number>               Number of worker processes (default: CPU count)
