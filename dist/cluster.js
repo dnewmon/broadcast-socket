@@ -14,7 +14,9 @@ export class ClusterManager {
                 logWithTimestamp('warn', `Worker ${worker.process.pid} died (${signal || code}). Restarting...`);
                 this.workers.delete(worker.id);
                 this.workerStats.delete(worker.id);
-                this.forkWorker();
+                setTimeout(() => {
+                    this.forkWorker();
+                }, 250);
             });
             cluster.on('message', (worker, message) => {
                 this.handleWorkerMessage(worker, message);
@@ -32,7 +34,7 @@ export class ClusterManager {
             case 'ping':
                 this.workerStats.set(worker.id, {
                     lastPing: Date.now(),
-                    data: message.data
+                    data: message.data,
                 });
                 break;
             case 'broadcast':
@@ -85,16 +87,15 @@ export class ClusterManager {
     }
     setupMasterHealthCheck() {
         setInterval(() => {
-            const aliveWorkers = Array.from(this.workers.values()).filter(w => !w.isDead()).length;
-            const totalConnections = Array.from(this.workerStats.values())
-                .reduce((sum, stats) => sum + (stats.data?.connections || 0), 0);
+            const aliveWorkers = Array.from(this.workers.values()).filter((w) => !w.isDead()).length;
+            const totalConnections = Array.from(this.workerStats.values()).reduce((sum, stats) => sum + (stats.data?.connections || 0), 0);
             logWithTimestamp('info', `Cluster health: ${aliveWorkers}/${this.config.workers} workers alive, ${totalConnections} total connections`);
             for (const worker of this.workers.values()) {
                 if (!worker.isDead()) {
                     worker.send({
                         type: 'ping',
                         workerId: 0,
-                        timestamp: Date.now()
+                        timestamp: Date.now(),
                     });
                 }
             }
@@ -109,7 +110,7 @@ export class ClusterManager {
                 process.send({
                     ...message,
                     workerId,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 });
             }
         };
@@ -123,8 +124,8 @@ export class ClusterManager {
                 type: 'ping',
                 data: {
                     connections: 0,
-                    uptime: process.uptime()
-                }
+                    uptime: process.uptime(),
+                },
             });
         }, 30000);
         process.on('SIGTERM', async () => {
@@ -136,7 +137,7 @@ export class ClusterManager {
             await server.start();
             sendClusterMessage({
                 type: 'client-connect',
-                data: { workerId, status: 'started' }
+                data: { workerId, status: 'started' },
             });
         }
         catch (error) {
@@ -148,20 +149,20 @@ export class ClusterManager {
         if (!cluster.isPrimary) {
             return null;
         }
-        const workers = Array.from(this.workers.values()).map(worker => ({
+        const workers = Array.from(this.workers.values()).map((worker) => ({
             id: worker.id,
             pid: worker.process.pid,
             isDead: worker.isDead(),
-            stats: this.workerStats.get(worker.id) || {}
+            stats: this.workerStats.get(worker.id) || {},
         }));
         return {
             master: {
                 pid: process.pid,
-                uptime: process.uptime()
+                uptime: process.uptime(),
             },
             workers,
             totalWorkers: this.workers.size,
-            aliveWorkers: workers.filter(w => !w.isDead).length
+            aliveWorkers: workers.filter((w) => !w.isDead).length,
         };
     }
 }
@@ -187,7 +188,7 @@ export class WorkerBroadcastBridge {
                 type: 'broadcast',
                 data,
                 workerId: this.workerId,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             };
             process.send(message);
         }
@@ -198,7 +199,7 @@ export class WorkerBroadcastBridge {
                 type: 'client-connect',
                 data: { clientId },
                 workerId: this.workerId,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
         }
     }
@@ -208,7 +209,7 @@ export class WorkerBroadcastBridge {
                 type: 'client-disconnect',
                 data: { clientId },
                 workerId: this.workerId,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             });
         }
     }
