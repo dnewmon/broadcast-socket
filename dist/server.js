@@ -36,7 +36,7 @@ export class BroadcastServer {
             res.json({
                 status: 'healthy',
                 uptime: Date.now() - this.startTime,
-                connections: this.clients.size
+                connections: this.clients.size,
             });
         });
         this.app.get('/stats', (_req, res) => {
@@ -73,13 +73,15 @@ export class BroadcastServer {
                 ws,
                 subscriptions: new Set(),
                 lastPing: Date.now(),
-                isAlive: true
+                isAlive: true,
             };
             this.clients.set(clientId, client);
             logWithTimestamp('info', `[SERVER] Client connected: ${clientId} from ${clientIp}`);
             logWithTimestamp('debug', `[SERVER] Total connected clients: ${this.clients.size}`);
             this.sendWelcomeMessage(client);
-            this.restoreClientSubscriptions(clientId);
+            this.restoreClientSubscriptions(clientId).catch(error => {
+                logWithTimestamp('error', `Failed to restore subscriptions for ${clientId}:`, error);
+            });
             ws.on('message', async (data) => {
                 logWithTimestamp('debug', `[SERVER] Received message from client ${clientId}: ${data.toString()}`);
                 await this.handleClientMessage(client, data);
@@ -118,6 +120,9 @@ export class BroadcastServer {
                 case 'broadcast':
                     await this.handleBroadcast(client, message);
                     break;
+                case 'ack':
+                    await this.handleClientAck(client, message);
+                    break;
                 default:
                     this.sendErrorMessage(client, 'Unknown message type');
             }
@@ -139,7 +144,7 @@ export class BroadcastServer {
             client.subscriptions.add(message.channel);
             logWithTimestamp('info', `[SERVER] Client ${client.id} subscribed to channel: ${message.channel}`);
             logWithTimestamp('debug', `[SERVER] Client ${client.id} now has ${client.subscriptions.size} subscriptions: [${Array.from(client.subscriptions).join(', ')}]`);
-            await this.broadcastManager.deliverQueuedMessages(client.id);
+            await this.broadcastManager.updateClientStreams(client.id);
         }
         else {
             logWithTimestamp('warn', `[SERVER] Client ${client.id} was already subscribed to channel: ${message.channel}`);
@@ -155,6 +160,7 @@ export class BroadcastServer {
         if (unsubscribed) {
             client.subscriptions.delete(message.channel);
             logWithTimestamp('info', `Client ${client.id} unsubscribed from channel: ${message.channel}`);
+            await this.broadcastManager.updateClientStreams(client.id);
         }
         this.sendAckMessage(client, message.messageId);
     }
@@ -173,15 +179,23 @@ export class BroadcastServer {
             this.sendErrorMessage(client, 'Failed to broadcast message');
         }
     }
+    async handleClientAck(client, message) {
+        if (!message.messageId) {
+            logWithTimestamp('warn', `[SERVER] ACK received from client ${client.id} without messageId`);
+            return;
+        }
+        logWithTimestamp('debug', `[SERVER] Processing ACK from client ${client.id} for message: ${message.messageId}`);
+        await this.broadcastManager.handleClientAcknowledgment(client.id, message.messageId);
+    }
     sendWelcomeMessage(client) {
         const welcomeMessage = {
             type: 'message',
             data: {
                 type: 'welcome',
                 clientId: client.id,
-                serverTime: Date.now()
+                serverTime: Date.now(),
             },
-            timestamp: Date.now()
+            timestamp: Date.now(),
         };
         this.sendMessage(client, welcomeMessage);
     }
@@ -190,7 +204,7 @@ export class BroadcastServer {
             type: 'ack',
             messageId,
             data: broadcastMessageId ? { broadcastMessageId } : undefined,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         };
         this.sendMessage(client, ackMessage);
     }
@@ -198,7 +212,7 @@ export class BroadcastServer {
         const errorMessage = {
             type: 'error',
             data: { error },
-            timestamp: Date.now()
+            timestamp: Date.now(),
         };
         this.sendMessage(client, errorMessage);
     }
@@ -222,7 +236,7 @@ export class BroadcastServer {
         if (!client)
             return;
         await this.subscriptionManager.unsubscribeClientFromAll(clientId);
-        this.broadcastManager.clearClientQueue(clientId);
+        await this.broadcastManager.cleanupClientStreams(clientId);
         this.clients.delete(clientId);
         logWithTimestamp('info', `Client disconnected: ${clientId} (code: ${code}, reason: ${reason.toString()})`);
     }
@@ -231,8 +245,12 @@ export class BroadcastServer {
             const subscriptions = await this.subscriptionManager.restoreClientSubscriptions(clientId);
             const client = this.clients.get(clientId);
             if (client && subscriptions.length > 0) {
-                subscriptions.forEach(channel => client.subscriptions.add(channel));
+                subscriptions.forEach((channel) => client.subscriptions.add(channel));
                 logWithTimestamp('info', `Restored ${subscriptions.length} subscriptions for client ${clientId}`);
+                await this.broadcastManager.initializeClientStreams(clientId);
+            }
+            else if (client) {
+                await this.broadcastManager.initializeClientStreams(clientId);
             }
         }
         catch (error) {
@@ -242,7 +260,7 @@ export class BroadcastServer {
     setupHeartbeat() {
         const interval = setInterval(() => {
             this.server.clients.forEach((ws) => {
-                const client = Array.from(this.clients.values()).find(c => c.ws === ws);
+                const client = Array.from(this.clients.values()).find((c) => c.ws === ws);
                 if (!client)
                     return;
                 if (!client.isAlive) {
@@ -252,7 +270,7 @@ export class BroadcastServer {
                 client.isAlive = false;
                 const pingMessage = {
                     type: 'ping',
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 };
                 try {
                     ws.ping();
@@ -269,17 +287,17 @@ export class BroadcastServer {
     }
     setupHealthChecks() {
         this.healthCheckInterval = setInterval(() => {
-            this.broadcastManager.retryFailedDeliveries();
+            logWithTimestamp('debug', '[SERVER] Health check interval - stream-based system handles cleanup automatically');
         }, 30000);
     }
     getServerStats() {
         return {
             totalConnections: this.clients.size,
-            activeConnections: Array.from(this.clients.values()).filter(c => c.isAlive).length,
+            activeConnections: Array.from(this.clients.values()).filter((c) => c.isAlive).length,
             totalMessages: 0,
             messagesPerSecond: 0,
             channels: this.subscriptionManager.getChannelStats(),
-            uptime: Date.now() - this.startTime
+            uptime: Date.now() - this.startTime,
         };
     }
     async start() {
@@ -308,6 +326,7 @@ export class BroadcastServer {
         });
         this.server.close();
         this.httpServer.close();
+        await this.broadcastManager.shutdown();
         await this.redis.disconnect();
         logWithTimestamp('info', 'Server shutdown complete');
     }

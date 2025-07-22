@@ -60,4 +60,61 @@ export class RedisDataKeys {
   static messageHistoryPattern(): string {
     return `${this.PREFIX}message:*`;
   }
+
+  /**
+   * Key for Redis Streams - channel-specific message streams.
+   * Format: sockets:stream:channel:{channel}
+   */
+  static channelStream(channel: string): string {
+    return `${this.PREFIX}stream:channel:${channel}`;
+  }
+
+  /**
+   * Key for Redis Streams - global broadcast stream for all clients.
+   * Format: sockets:stream:global
+   */
+  static globalStream(): string {
+    return `${this.PREFIX}stream:global`;
+  }
+
+  /**
+   * Consumer group name for a specific client.
+   * Format: client:{clientId}
+   */
+  static clientConsumerGroup(clientId: string): string {
+    return `client:${clientId}`;
+  }
+
+  /**
+   * Consumer name for a specific worker process handling a client.
+   * Format: worker:{workerId}:client:{clientId}
+   */
+  static clientConsumerName(workerId: string, clientId: string): string {
+    return `worker:${workerId}:client:${clientId}`;
+  }
+
+  /**
+   * Key for tracking client's last acknowledged message ID per stream.
+   * Format: sockets:client:{clientId}:ack:{streamKey}
+   */
+  static clientAckState(clientId: string, streamKey: string): string {
+    const streamSuffix = streamKey.replace(`${this.PREFIX}stream:`, '');
+    return `${this.PREFIX}client:${clientId}:ack:${streamSuffix}`;
+  }
+
+  /**
+   * Pattern for finding all stream keys.
+   * Format: sockets:stream:*
+   */
+  static streamPattern(): string {
+    return `${this.PREFIX}stream:*`;
+  }
+
+  /**
+   * Key for storing pending message metadata for offline clients.
+   * Format: sockets:client:{clientId}:pending
+   */
+  static clientPendingMessages(clientId: string): string {
+    return `${this.PREFIX}client:${clientId}:pending`;
+  }
 }

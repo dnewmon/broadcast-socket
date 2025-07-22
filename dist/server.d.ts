@@ -17,6 +17,7 @@ export declare class BroadcastServer {
     private handleSubscribe;
     private handleUnsubscribe;
     private handleBroadcast;
+    private handleClientAck;
     private sendWelcomeMessage;
     private sendAckMessage;
     private sendErrorMessage;

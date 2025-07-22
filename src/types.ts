@@ -1,5 +1,5 @@
 export interface ClientMessage {
-    type: 'subscribe' | 'unsubscribe' | 'broadcast';
+    type: 'subscribe' | 'unsubscribe' | 'broadcast' | 'ack';
     channel?: string;
     data?: unknown;
     messageId?: string;

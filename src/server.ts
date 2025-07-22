@@ -97,7 +97,9 @@ export class BroadcastServer {
             logWithTimestamp('debug', `[SERVER] Total connected clients: ${this.clients.size}`);
 
             this.sendWelcomeMessage(client);
-            this.restoreClientSubscriptions(clientId);
+            this.restoreClientSubscriptions(clientId).catch(error => {
+                logWithTimestamp('error', `Failed to restore subscriptions for ${clientId}:`, error);
+            });
 
             ws.on('message', async (data: WebSocket.RawData) => {
                 logWithTimestamp('debug', `[SERVER] Received message from client ${clientId}: ${data.toString()}`);
@@ -144,6 +146,9 @@ export class BroadcastServer {
                 case 'broadcast':
                     await this.handleBroadcast(client, message);
                     break;
+                case 'ack':
+                    await this.handleClientAck(client, message);
+                    break;
                 default:
                     this.sendErrorMessage(client, 'Unknown message type');
             }
@@ -168,7 +173,8 @@ export class BroadcastServer {
             logWithTimestamp('info', `[SERVER] Client ${client.id} subscribed to channel: ${message.channel}`);
             logWithTimestamp('debug', `[SERVER] Client ${client.id} now has ${client.subscriptions.size} subscriptions: [${Array.from(client.subscriptions).join(', ')}]`);
 
-            await this.broadcastManager.deliverQueuedMessages(client.id);
+            // Update client's consumer streams for new subscription
+            await this.broadcastManager.updateClientStreams(client.id);
         } else {
             logWithTimestamp('warn', `[SERVER] Client ${client.id} was already subscribed to channel: ${message.channel}`);
         }
@@ -187,6 +193,9 @@ export class BroadcastServer {
         if (unsubscribed) {
             client.subscriptions.delete(message.channel);
             logWithTimestamp('info', `Client ${client.id} unsubscribed from channel: ${message.channel}`);
+            
+            // Update client's consumer streams for removed subscription
+            await this.broadcastManager.updateClientStreams(client.id);
         }
 
         this.sendAckMessage(client, message.messageId);
@@ -208,6 +217,16 @@ export class BroadcastServer {
             logWithTimestamp('error', `[SERVER] Broadcast error for client ${client.id}:`, error);
             this.sendErrorMessage(client, 'Failed to broadcast message');
         }
+    }
+
+    private async handleClientAck(client: Client, message: ClientMessage): Promise<void> {
+        if (!message.messageId) {
+            logWithTimestamp('warn', `[SERVER] ACK received from client ${client.id} without messageId`);
+            return;
+        }
+
+        logWithTimestamp('debug', `[SERVER] Processing ACK from client ${client.id} for message: ${message.messageId}`);
+        await this.broadcastManager.handleClientAcknowledgment(client.id, message.messageId);
     }
 
     private sendWelcomeMessage(client: Client): void {
@@ -264,7 +283,7 @@ export class BroadcastServer {
         if (!client) return;
 
         await this.subscriptionManager.unsubscribeClientFromAll(clientId);
-        this.broadcastManager.clearClientQueue(clientId);
+        await this.broadcastManager.cleanupClientStreams(clientId);
         this.clients.delete(clientId);
 
         logWithTimestamp('info', `Client disconnected: ${clientId} (code: ${code}, reason: ${reason.toString()})`);
@@ -278,6 +297,12 @@ export class BroadcastServer {
             if (client && subscriptions.length > 0) {
                 subscriptions.forEach((channel) => client.subscriptions.add(channel));
                 logWithTimestamp('info', `Restored ${subscriptions.length} subscriptions for client ${clientId}`);
+                
+                // Initialize consumer streams for restored subscriptions
+                await this.broadcastManager.initializeClientStreams(clientId);
+            } else if (client) {
+                // Initialize streams even for clients with no stored subscriptions (they get global stream)
+                await this.broadcastManager.initializeClientStreams(clientId);
             }
         } catch (error) {
             logWithTimestamp('error', `Error restoring subscriptions for client ${clientId}:`, error);
@@ -319,7 +344,8 @@ export class BroadcastServer {
 
     private setupHealthChecks(): void {
         this.healthCheckInterval = setInterval(() => {
-            this.broadcastManager.retryFailedDeliveries();
+            // Health checks are now handled by the StreamManager's automatic cleanup
+            logWithTimestamp('debug', '[SERVER] Health check interval - stream-based system handles cleanup automatically');
         }, 30000);
     }
 
@@ -364,6 +390,8 @@ export class BroadcastServer {
 
         this.server.close();
         this.httpServer.close();
+        
+        await this.broadcastManager.shutdown();
         await this.redis.disconnect();
 
         logWithTimestamp('info', 'Server shutdown complete');

@@ -142,7 +142,7 @@ export class SubscriptionManager {
             states.push({
                 clientId,
                 channels: Array.from(channels),
-                lastActivity: Date.now()
+                lastActivity: Date.now(),
             });
         }
         return states;

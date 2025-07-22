@@ -59,7 +59,7 @@ export function getServerConfig() {
         redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
         workers: parseInt(process.env.WORKERS || '0', 10) || cpus().length,
         pingInterval: parseInt(process.env.PING_INTERVAL || '30000', 10),
-        heartbeatTimeout: parseInt(process.env.HEARTBEAT_TIMEOUT || '60000', 10)
+        heartbeatTimeout: parseInt(process.env.HEARTBEAT_TIMEOUT || '60000', 10),
     };
 }
 export function formatError(error) {
@@ -87,7 +87,7 @@ export function throttle(func, limit) {
         else {
             clearTimeout(lastFunc);
             lastFunc = setTimeout(() => {
-                if ((Date.now() - lastRan) >= limit) {
+                if (Date.now() - lastRan >= limit) {
                     func(...args);
                     lastRan = Date.now();
                 }
@@ -105,7 +105,7 @@ export function parseWebSocketUrl(url) {
         protocol: urlObj.protocol,
         host: urlObj.hostname,
         port: parseInt(urlObj.port) || (urlObj.protocol === 'wss:' ? 443 : 80),
-        path: urlObj.pathname
+        path: urlObj.pathname,
     };
 }
 export function formatBytes(bytes) {

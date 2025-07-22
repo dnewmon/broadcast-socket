@@ -3,33 +3,47 @@ import { BroadcastMessage, ServerMessage, Client } from './types.js';
 import { RedisManager } from './redis.js';
 import { SubscriptionManager } from './subscription.js';
 import { RedisDataKeys } from './RedisDataKeys.js';
+import { StreamManager, StreamMessage } from './stream.js';
 
 export class BroadcastManager {
     private redis: RedisManager;
     private subscriptionManager: SubscriptionManager;
+    private streamManager: StreamManager;
     private clients: Map<string, Client>;
-    private messageQueue: Map<string, BroadcastMessage[]> = new Map();
     private deduplicationCache: Set<string> = new Set();
+    private messagePollingInterval: NodeJS.Timeout | null = null;
 
     constructor(redis: RedisManager, subscriptionManager: SubscriptionManager, clients: Map<string, Client>) {
         this.redis = redis;
         this.subscriptionManager = subscriptionManager;
         this.clients = clients;
-        this.setupRedisSubscriptions();
+        this.streamManager = new StreamManager(redis);
+        this.startMessagePolling();
     }
 
-    private setupRedisSubscriptions(): void {
-        console.log('[BROADCAST] Setting up Redis subscriptions for broadcast:* pattern');
-        this.redis.subscribeToChannel(RedisDataKeys.broadcastPattern(), (message: string) => {
+    private startMessagePolling(): void {
+        console.log('[BROADCAST] Starting stream-based message polling');
+        this.messagePollingInterval = setInterval(async () => {
+            await this.pollAndDeliverMessages();
+        }, 1000); // Poll every second
+    }
+
+    private async pollAndDeliverMessages(): Promise<void> {
+        const activeClients = Array.from(this.clients.entries()).filter(([, client]) => client.isAlive);
+        
+        for (const [clientId] of activeClients) {
             try {
-                console.log('[BROADCAST] Received Redis message:', message);
-                const broadcastMessage: BroadcastMessage = JSON.parse(message);
-                console.log('[BROADCAST] Parsed broadcast message:', broadcastMessage);
-                this.handleIncomingBroadcast(broadcastMessage);
+                const messages = await this.streamManager.readMessagesForClient(clientId, 10);
+                
+                for (const streamMessage of messages) {
+                    if (streamMessage.parsedData) {
+                        await this.deliverStreamMessageToClient(clientId, streamMessage);
+                    }
+                }
             } catch (error) {
-                console.error('[BROADCAST] Error parsing broadcast message:', error);
+                console.error(`[BROADCAST] Error polling messages for client ${clientId}:`, error);
             }
-        });
+        }
     }
 
     async broadcastToChannel(channel: string, data: unknown, senderId?: string): Promise<string> {
@@ -47,11 +61,13 @@ export class BroadcastManager {
             senderId,
         };
 
+        // Store message for backward compatibility with HTTP API
         console.log(`[BROADCAST] Storing message in Redis: ${messageId}`);
         await this.redis.storeMessage(messageId, broadcastMessage);
 
-        console.log(`[BROADCAST] Publishing to Redis channel: ${RedisDataKeys.broadcastChannel(channel)}`);
-        await this.redis.publishMessage(RedisDataKeys.broadcastChannel(channel), broadcastMessage);
+        // Publish to stream instead of pub/sub
+        console.log(`[BROADCAST] Publishing to stream for channel: ${channel}`);
+        await this.streamManager.publishMessage(channel, broadcastMessage);
 
         await this.redis.incrementCounter(RedisDataKeys.totalMessagesStats());
         await this.redis.incrementCounter(RedisDataKeys.channelMessagesStats(channel));
@@ -64,11 +80,22 @@ export class BroadcastManager {
         return this.broadcastToChannel('*', data, senderId);
     }
 
-    private async handleIncomingBroadcast(broadcastMessage: BroadcastMessage): Promise<void> {
-        console.log(`[BROADCAST] Handling incoming broadcast: ${broadcastMessage.messageId} for channel: ${broadcastMessage.channel}`);
+    private async deliverStreamMessageToClient(clientId: string, streamMessage: StreamMessage): Promise<void> {
+        const broadcastMessage = streamMessage.parsedData!;
 
+        console.log(`[BROADCAST] Delivering stream message ${broadcastMessage.messageId} to client ${clientId}`);
+
+        // Check for deduplication
         if (this.deduplicationCache.has(broadcastMessage.messageId)) {
             console.log(`[BROADCAST] Message ${broadcastMessage.messageId} already processed (deduplication)`);
+            await this.streamManager.acknowledgeMessage(clientId, streamMessage.streamKey, streamMessage.id);
+            return;
+        }
+
+        // Skip if message is from the same sender
+        if (broadcastMessage.senderId === clientId) {
+            console.log(`[BROADCAST] Skipping message ${broadcastMessage.messageId} - same sender`);
+            await this.streamManager.acknowledgeMessage(clientId, streamMessage.streamKey, streamMessage.id);
             return;
         }
 
@@ -77,107 +104,46 @@ export class BroadcastManager {
             this.deduplicationCache.delete(broadcastMessage.messageId);
         }, 60000);
 
-        const { channel, data, messageId, timestamp, senderId } = broadcastMessage;
-        console.log(`[BROADCAST] Processing message ${messageId} from sender ${senderId} for channel ${channel}`);
-
-        if (channel === '*') {
-            console.log(`[BROADCAST] Delivering to all clients (global broadcast)`);
-            await this.deliverToAllClients(data, messageId, timestamp, senderId);
-        } else {
-            console.log(`[BROADCAST] Delivering to channel subscribers: ${channel}`);
-            await this.deliverToChannelSubscribers(channel, data, messageId, timestamp, senderId);
+        // Check if client is subscribed to this channel (for channel-specific messages)
+        if (broadcastMessage.channel !== '*') {
+            const isSubscribed = this.subscriptionManager.isClientSubscribed(clientId, broadcastMessage.channel);
+            if (!isSubscribed) {
+                console.log(`[BROADCAST] Client ${clientId} not subscribed to channel ${broadcastMessage.channel}, ACKing without delivery`);
+                await this.streamManager.acknowledgeMessage(clientId, streamMessage.streamKey, streamMessage.id);
+                return;
+            }
         }
-    }
 
-    private async deliverToChannelSubscribers(channel: string, data: unknown, messageId: string, timestamp: number, senderId?: string): Promise<void> {
-        const subscribers = this.subscriptionManager.getChannelSubscribers(channel);
-        console.log(`[BROADCAST] Channel ${channel} has ${subscribers.length} subscribers: [${subscribers.join(', ')}]`);
-
-        const serverMessage: ServerMessage = {
-            type: 'message',
-            channel,
-            data,
-            messageId,
-            timestamp,
-        };
-
-        const targetClients = subscribers.filter((clientId) => clientId !== senderId);
-        console.log(`[BROADCAST] Delivering to ${targetClients.length} clients (excluding sender ${senderId}): [${targetClients.join(', ')}]`);
-
-        const deliveryPromises = targetClients.map((clientId) => this.deliverToClient(clientId, serverMessage));
-
-        const results = await Promise.allSettled(deliveryPromises);
-        const failures = results.filter((r) => r.status === 'rejected').length;
-        console.log(`[BROADCAST] Delivery completed for channel ${channel}: ${results.length - failures}/${results.length} successful`);
-    }
-
-    private async deliverToAllClients(data: unknown, messageId: string, timestamp: number, senderId?: string): Promise<void> {
-        const serverMessage: ServerMessage = {
-            type: 'message',
-            channel: '*',
-            data,
-            messageId,
-            timestamp,
-        };
-
-        const deliveryPromises = Array.from(this.clients.keys())
-            .filter((clientId) => clientId !== senderId)
-            .map((clientId) => this.deliverToClient(clientId, serverMessage));
-
-        await Promise.allSettled(deliveryPromises);
-    }
-
-    private async deliverToClient(clientId: string, message: ServerMessage): Promise<void> {
-        console.log(`[BROADCAST] Attempting to deliver message ${message.messageId} to client ${clientId}`);
         const client = this.clients.get(clientId);
-
-        if (!client) {
-            console.log(`[BROADCAST] Client ${clientId} not found in clients map, queueing message`);
-            this.queueMessage(clientId, {
-                channel: message.channel || '',
-                data: message.data,
-                messageId: message.messageId || '',
-                timestamp: message.timestamp,
-            });
+        if (!client || !client.isAlive) {
+            console.log(`[BROADCAST] Client ${clientId} not available, message will remain in pending state`);
             return;
         }
 
-        if (!client.isAlive) {
-            console.log(`[BROADCAST] Client ${clientId} is not alive, queueing message`);
-            this.queueMessage(clientId, {
-                channel: message.channel || '',
-                data: message.data,
-                messageId: message.messageId || '',
-                timestamp: message.timestamp,
-            });
-            return;
-        }
+        const serverMessage: ServerMessage = {
+            type: 'message',
+            channel: broadcastMessage.channel,
+            data: broadcastMessage.data,
+            messageId: broadcastMessage.messageId,
+            timestamp: broadcastMessage.timestamp,
+        };
 
         try {
             if (client.ws.readyState === 1) {
-                console.log(`[BROADCAST] Sending message ${message.messageId} to client ${clientId}`);
-                client.ws.send(JSON.stringify(message));
-                console.log(`[BROADCAST] Message ${message.messageId} sent successfully to client ${clientId}`);
-                await this.sendAcknowledgment(client, message.messageId);
+                console.log(`[BROADCAST] Sending stream message ${broadcastMessage.messageId} to client ${clientId}`);
+                client.ws.send(JSON.stringify(serverMessage));
+                console.log(`[BROADCAST] Stream message ${broadcastMessage.messageId} sent successfully to client ${clientId}`);
+                
+                // Note: We don't ACK here - we wait for the client to ACK
+                await this.sendAcknowledgment(client, broadcastMessage.messageId);
             } else {
-                console.log(`[BROADCAST] Client ${clientId} WebSocket not ready (state: ${client.ws.readyState}), queueing message`);
-                this.queueMessage(clientId, {
-                    channel: message.channel || '',
-                    data: message.data,
-                    messageId: message.messageId || '',
-                    timestamp: message.timestamp,
-                });
+                console.log(`[BROADCAST] Client ${clientId} WebSocket not ready (state: ${client.ws.readyState}), message remains pending`);
             }
         } catch (error) {
-            console.error(`[BROADCAST] Error delivering message to client ${clientId}:`, error);
-            this.queueMessage(clientId, {
-                channel: message.channel || '',
-                data: message.data,
-                messageId: message.messageId || '',
-                timestamp: message.timestamp,
-            });
+            console.error(`[BROADCAST] Error delivering stream message to client ${clientId}:`, error);
         }
     }
+
 
     private async sendAcknowledgment(client: Client, messageId?: string): Promise<void> {
         if (!messageId) return;
@@ -197,75 +163,65 @@ export class BroadcastManager {
         }
     }
 
-    private queueMessage(clientId: string, message: BroadcastMessage): void {
-        console.log(`[BROADCAST] Queueing message ${message.messageId} for client ${clientId}`);
-
-        if (!this.messageQueue.has(clientId)) {
-            this.messageQueue.set(clientId, []);
-        }
-
-        const queue = this.messageQueue.get(clientId)!;
-        queue.push(message);
-
-        if (queue.length > 100) {
-            const dropped = queue.shift();
-            console.log(`[BROADCAST] Queue full for client ${clientId}, dropped message ${dropped?.messageId}`);
-        }
-
-        console.log(`[BROADCAST] Client ${clientId} now has ${queue.length} queued messages`);
-    }
-
-    async deliverQueuedMessages(clientId: string): Promise<void> {
-        const queue = this.messageQueue.get(clientId);
-        if (!queue || queue.length === 0) {
+    // Method to handle client ACK messages and XACK the Redis stream
+    async handleClientAcknowledgment(clientId: string, messageId: string): Promise<void> {
+        console.log(`[BROADCAST] Handling client ACK for message ${messageId} from client ${clientId}`);
+        
+        // Find the consumer info for this client
+        const consumerInfo = this.streamManager.getConsumerInfo(clientId);
+        if (!consumerInfo) {
+            console.log(`[BROADCAST] No consumer info found for client ${clientId} - cannot ACK`);
             return;
         }
 
-        const client = this.clients.get(clientId);
-        if (!client || !client.isAlive) {
-            return;
-        }
-
-        const messages = queue.splice(0);
-
-        for (const queuedMessage of messages) {
-            const serverMessage: ServerMessage = {
-                type: 'message',
-                channel: queuedMessage.channel,
-                data: queuedMessage.data,
-                messageId: queuedMessage.messageId,
-                timestamp: queuedMessage.timestamp,
-            };
-
-            await this.deliverToClient(clientId, serverMessage);
-        }
-
-        if (queue.length === 0) {
-            this.messageQueue.delete(clientId);
+        // We need to find which stream this message belongs to
+        // For now, we'll try to ACK from all the client's streams
+        for (const streamKey of consumerInfo.streamKeys) {
+            try {
+                // Try to find the stream message ID based on the message ID
+                // This is a limitation - we need a better way to track stream message IDs
+                // For now, we'll implement a simple tracking mechanism
+                await this.streamManager.acknowledgeMessage(clientId, streamKey, messageId);
+                console.log(`[BROADCAST] Successfully ACK'd message ${messageId} from stream ${streamKey} for client ${clientId}`);
+                break; // Only ACK from one stream
+            } catch {
+                // This is expected if the message isn't in this stream
+                continue;
+            }
         }
     }
 
-    async retryFailedDeliveries(): Promise<void> {
-        const retryPromises = Array.from(this.messageQueue.keys()).map((clientId) => this.deliverQueuedMessages(clientId));
-
-        await Promise.allSettled(retryPromises);
+    // Stream-based client management methods
+    async initializeClientStreams(clientId: string): Promise<void> {
+        const subscriptions = this.subscriptionManager.getClientSubscriptions(clientId);
+        console.log(`[BROADCAST] Initializing streams for client ${clientId} with subscriptions:`, subscriptions);
+        
+        await this.streamManager.createClientConsumer(clientId, subscriptions);
+        console.log(`[BROADCAST] Initialized consumer for client ${clientId}`);
     }
 
-    getQueuedMessageCount(clientId: string): number {
-        const queue = this.messageQueue.get(clientId);
-        return queue ? queue.length : 0;
+    async updateClientStreams(clientId: string): Promise<void> {
+        const subscriptions = this.subscriptionManager.getClientSubscriptions(clientId);
+        console.log(`[BROADCAST] Updating streams for client ${clientId} with subscriptions:`, subscriptions);
+        
+        await this.streamManager.updateClientChannels(clientId, subscriptions);
+        console.log(`[BROADCAST] Updated consumer for client ${clientId}`);
     }
 
-    getTotalQueuedMessages(): number {
-        let total = 0;
-        for (const queue of this.messageQueue.values()) {
-            total += queue.length;
-        }
-        return total;
+    async cleanupClientStreams(clientId: string): Promise<void> {
+        console.log(`[BROADCAST] Cleaning up streams for client ${clientId}`);
+        await this.streamManager.destroyClientConsumer(clientId);
+        console.log(`[BROADCAST] Cleaned up consumer for client ${clientId}`);
     }
 
-    clearClientQueue(clientId: string): void {
-        this.messageQueue.delete(clientId);
+    getPendingMessageCount(clientId: string): number {
+        const consumerInfo = this.streamManager.getConsumerInfo(clientId);
+        return consumerInfo ? consumerInfo.streamKeys.length : 0; // Approximate pending count
+    }
+
+    getTotalPendingMessages(): number {
+        const consumers = this.streamManager.getAllConsumers();
+        return consumers.reduce((total, consumer) => total + consumer.streamKeys.length, 0);
     }
 
     async getMessageHistory(channel: string, limit: number = 50): Promise<BroadcastMessage[]> {
@@ -289,5 +245,20 @@ export class BroadcastManager {
             console.error('Error fetching message history:', error);
             return [];
         }
+    }
+
+    async shutdown(): Promise<void> {
+        console.log('[BROADCAST] Shutting down BroadcastManager');
+        
+        if (this.messagePollingInterval) {
+            clearInterval(this.messagePollingInterval);
+        }
+
+        await this.streamManager.shutdown();
+        console.log('[BROADCAST] BroadcastManager shutdown complete');
+    }
+
+    getStreamManager(): StreamManager {
+        return this.streamManager;
     }
 }

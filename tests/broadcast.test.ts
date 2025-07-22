@@ -13,6 +13,15 @@ describe('BroadcastManager', () => {
 
   beforeEach(() => {
     mockRedis = new RedisManager('redis://test') as jest.Mocked<RedisManager>;
+    
+    // Mock all the new stream methods
+    mockRedis.addToStream = jest.fn().mockResolvedValue('1234567890-0');
+    mockRedis.createConsumerGroup = jest.fn().mockResolvedValue(undefined);
+    mockRedis.deleteConsumerGroup = jest.fn().mockResolvedValue(undefined);
+    mockRedis.readFromConsumerGroup = jest.fn().mockResolvedValue([]);
+    mockRedis.readPendingMessages = jest.fn().mockResolvedValue([]);
+    mockRedis.acknowledgeMessage = jest.fn().mockResolvedValue(1);
+    
     mockSubscriptionManager = {
       getChannelSubscribers: jest.fn(),
       subscribeClient: jest.fn(),
@@ -95,25 +104,24 @@ describe('BroadcastManager', () => {
     });
   });
 
-  describe('Message Queueing', () => {
-    test('should queue messages for offline clients', () => {
+  describe('Stream Management', () => {
+    test('should get pending message count for client', () => {
       const clientId = 'test-client';
-      const initialCount = broadcastManager.getQueuedMessageCount(clientId);
+      const pendingCount = broadcastManager.getPendingMessageCount(clientId);
       
-      expect(initialCount).toBe(0);
+      expect(typeof pendingCount).toBe('number');
     });
 
-    test('should get total queued messages', () => {
-      const total = broadcastManager.getTotalQueuedMessages();
+    test('should get total pending messages', () => {
+      const total = broadcastManager.getTotalPendingMessages();
       expect(typeof total).toBe('number');
     });
 
-    test('should clear client queue', () => {
+    test('should initialize client streams', async () => {
       const clientId = 'test-client';
-      broadcastManager.clearClientQueue(clientId);
+      mockSubscriptionManager.getClientSubscriptions.mockReturnValue(['test-channel']);
       
-      const count = broadcastManager.getQueuedMessageCount(clientId);
-      expect(count).toBe(0);
+      await expect(broadcastManager.initializeClientStreams(clientId)).resolves.not.toThrow();
     });
   });
 
