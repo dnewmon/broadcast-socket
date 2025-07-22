@@ -87,7 +87,7 @@ export class RedisManager {
         await this.client.del(key);
         if (subscriptions.length > 0) {
             await this.client.sAdd(key, subscriptions);
-            await this.client.expire(key, 3600);
+            await this.client.expire(key, RedisDataKeys.CLIENT_SUBSCRIPTIONS_TTL);
             console.log(`[REDIS] Stored ${subscriptions.length} subscriptions for client ${clientId}`);
         } else {
             console.log(`[REDIS] Cleared subscriptions for client ${clientId} (no subscriptions)`);
@@ -106,7 +106,7 @@ export class RedisManager {
         await this.client.del(RedisDataKeys.clientSubscriptions(clientId));
     }
 
-    async incrementCounter(key: string, ttl: number = 3600): Promise<number> {
+    async incrementCounter(key: string, ttl: number = RedisDataKeys.COUNTER_TTL): Promise<number> {
         const count = await this.client.incr(key);
         if (count === 1) {
             await this.client.expire(key, ttl);
@@ -124,7 +124,7 @@ export class RedisManager {
     }
 
     // Redis Streams operations for message broadcasting
-    async addToStream(streamKey: string, data: Record<string, string>, maxLength?: number): Promise<string> {
+    async addToStream(streamKey: string, data: Record<string, string>, maxLength: number = RedisDataKeys.STREAM_MAX_LENGTH): Promise<string> {
         const options: any = {};
         if (maxLength) {
             options.TRIM = { strategy: 'MAXLEN', strategyModifier: '~', threshold: maxLength };
@@ -135,7 +135,7 @@ export class RedisManager {
         console.log(`[REDIS] Message added to stream ${streamKey} with ID: ${messageId}`);
         
         // Set TTL of 1 hour on the stream
-        await this.client.expire(streamKey, 3600);
+        await this.client.expire(streamKey, RedisDataKeys.STREAM_TTL);
         return messageId;
     }
 
@@ -212,7 +212,7 @@ export class RedisManager {
                 groupName,
                 consumerName,
                 [{ key: streamKey, id: '0' }], // Read from beginning to get pending messages
-                { COUNT: count || 10 }
+                { COUNT: count || RedisDataKeys.STREAM_BATCH_SIZE }
             );
 
             return result || [];

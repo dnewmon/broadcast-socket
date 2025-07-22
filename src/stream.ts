@@ -159,7 +159,7 @@ export class StreamManager {
         }
 
         // Filter out messages older than 10 minutes and auto-ACK them
-        const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+        const tenMinutesAgo = Date.now() - RedisDataKeys.MESSAGE_TIMEOUT_MS;
         const validMessages: StreamMessage[] = [];
 
         for (const message of messages) {
@@ -189,7 +189,7 @@ export class StreamManager {
                     streamKey, 
                     consumer.groupName, 
                     consumer.consumerName,
-                    5
+                    RedisDataKeys.STREAM_BATCH_SIZE
                 );
 
                 for (const streamData of result) {
@@ -304,7 +304,7 @@ export class StreamManager {
             const pattern = RedisDataKeys.streamPattern();
             const keys = await this.redis.getClient().keys(pattern);
             
-            const tenMinutesMs = 10 * 60 * 1000;
+            const tenMinutesMs = RedisDataKeys.MESSAGE_TIMEOUT_MS;
             
             for (const streamKey of keys) {
                 await this.redis.deleteOldMessages(streamKey, tenMinutesMs);
