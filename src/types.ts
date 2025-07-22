@@ -1,69 +1,69 @@
 export interface ClientMessage {
-  type: 'subscribe' | 'unsubscribe' | 'broadcast';
-  channel?: string;
-  data?: unknown;
-  messageId?: string;
+    type: 'subscribe' | 'unsubscribe' | 'broadcast';
+    channel?: string;
+    data?: unknown;
+    messageId?: string;
 }
 
 export interface ServerMessage {
-  type: 'message' | 'ack' | 'error' | 'ping';
-  channel?: string | undefined;
-  data?: unknown;
-  messageId?: string | undefined;
-  timestamp: number;
+    type: 'message' | 'ack' | 'error' | 'ping';
+    channel?: string | undefined;
+    data?: unknown;
+    messageId?: string | undefined;
+    timestamp: number;
 }
 
 import { WebSocket } from 'ws';
 
 export interface Client {
-  id: string;
-  ws: WebSocket;
-  subscriptions: Set<string>;
-  lastPing: number;
-  isAlive: boolean;
+    id: string;
+    ws: WebSocket;
+    subscriptions: Set<string>;
+    lastPing: number;
+    isAlive: boolean;
 }
 
 export interface BroadcastMessage {
-  channel: string;
-  data: unknown;
-  messageId: string;
-  timestamp: number;
-  senderId?: string | undefined;
+    channel: string;
+    data: unknown;
+    messageId: string;
+    timestamp: number;
+    senderId?: string | undefined;
 }
 
 export interface SubscriptionState {
-  clientId: string;
-  channels: string[];
-  lastActivity: number;
+    clientId: string;
+    channels: string[];
+    lastActivity: number;
 }
 
 export interface ServerStats {
-  totalConnections: number;
-  activeConnections: number;
-  totalMessages: number;
-  messagesPerSecond: number;
-  channels: Record<string, number>;
-  uptime: number;
+    totalConnections: number;
+    activeConnections: number;
+    totalMessages: number;
+    messagesPerSecond: number;
+    channels: Record<string, number>;
+    uptime: number;
 }
 
 export interface ClusterMessage {
-  type: 'broadcast' | 'client-connect' | 'client-disconnect' | 'ping';
-  data?: unknown;
-  workerId: number;
-  timestamp: number;
+    type: 'broadcast' | 'client-connect' | 'client-disconnect' | 'ping';
+    data?: unknown;
+    workerId: number;
+    timestamp: number;
 }
 
 export interface ServerConfig {
-  port: number;
-  corsOrigin: string;
-  redisUrl: string;
-  workers: number;
-  pingInterval: number;
-  heartbeatTimeout: number;
+    port: number;
+    corsOrigin: string;
+    redisUrl: string;
+    workers: number;
+    pingInterval: number;
+    heartbeatTimeout: number;
 }
 
 export interface WorkerStatsData {
-  connections?: number;
-  messages?: number;
-  uptime?: number;
+    connections?: number;
+    messages?: number;
+    uptime?: number;
 }
