@@ -72,7 +72,7 @@ export class RedisManager {
         await this.client.del(key);
         if (subscriptions.length > 0) {
             await this.client.sAdd(key, subscriptions);
-            await this.client.expire(key, 3600);
+            await this.client.expire(key, RedisDataKeys.CLIENT_SUBSCRIPTIONS_TTL);
             console.log(`[REDIS] Stored ${subscriptions.length} subscriptions for client ${clientId}`);
         }
         else {
@@ -89,7 +89,7 @@ export class RedisManager {
     async removeClientSubscriptions(clientId) {
         await this.client.del(RedisDataKeys.clientSubscriptions(clientId));
     }
-    async incrementCounter(key, ttl = 3600) {
+    async incrementCounter(key, ttl = RedisDataKeys.COUNTER_TTL) {
         const count = await this.client.incr(key);
         if (count === 1) {
             await this.client.expire(key, ttl);
@@ -103,7 +103,7 @@ export class RedisManager {
     getClient() {
         return this.client;
     }
-    async addToStream(streamKey, data, maxLength) {
+    async addToStream(streamKey, data, maxLength = RedisDataKeys.STREAM_MAX_LENGTH) {
         const options = {};
         if (maxLength) {
             options.TRIM = { strategy: 'MAXLEN', strategyModifier: '~', threshold: maxLength };
@@ -111,7 +111,7 @@ export class RedisManager {
         console.log(`[REDIS] Adding to stream ${streamKey}:`, data);
         const messageId = await this.client.xAdd(streamKey, '*', data, options);
         console.log(`[REDIS] Message added to stream ${streamKey} with ID: ${messageId}`);
-        await this.client.expire(streamKey, 3600);
+        await this.client.expire(streamKey, RedisDataKeys.STREAM_TTL);
         return messageId;
     }
     async createConsumerGroup(streamKey, groupName, startId = '$') {
@@ -161,7 +161,7 @@ export class RedisManager {
                 return [];
             }
             console.log(`[REDIS] Found ${pendingInfo.pending} pending messages for consumer ${consumerName}`);
-            const result = await this.client.xReadGroup(groupName, consumerName, [{ key: streamKey, id: '0' }], { COUNT: count || 10 });
+            const result = await this.client.xReadGroup(groupName, consumerName, [{ key: streamKey, id: '0' }], { COUNT: count || RedisDataKeys.STREAM_BATCH_SIZE });
             return result || [];
         }
         catch (error) {

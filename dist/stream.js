@@ -106,7 +106,7 @@ export class StreamManager {
             const newMessages = await this.readNewMessagesForClient(clientId, remainingCount);
             messages.push(...newMessages);
         }
-        const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+        const tenMinutesAgo = Date.now() - RedisDataKeys.MESSAGE_TIMEOUT_MS;
         const validMessages = [];
         for (const message of messages) {
             const messageTime = this.extractTimestampFromStreamId(message.id);
@@ -128,7 +128,7 @@ export class StreamManager {
         const messages = [];
         for (const streamKey of consumer.streamKeys) {
             try {
-                const result = await this.redis.readPendingMessages(streamKey, consumer.groupName, consumer.consumerName, 5);
+                const result = await this.redis.readPendingMessages(streamKey, consumer.groupName, consumer.consumerName, RedisDataKeys.STREAM_BATCH_SIZE);
                 for (const streamData of result) {
                     if (streamData && streamData.messages) {
                         for (const messageData of streamData.messages) {
@@ -223,7 +223,7 @@ export class StreamManager {
         try {
             const pattern = RedisDataKeys.streamPattern();
             const keys = await this.redis.getClient().keys(pattern);
-            const tenMinutesMs = 10 * 60 * 1000;
+            const tenMinutesMs = RedisDataKeys.MESSAGE_TIMEOUT_MS;
             for (const streamKey of keys) {
                 await this.redis.deleteOldMessages(streamKey, tenMinutesMs);
             }

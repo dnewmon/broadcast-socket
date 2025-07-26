@@ -1,5 +1,11 @@
 export class RedisDataKeys {
     static PREFIX = 'sockets:';
+    static MESSAGE_TIMEOUT_MS = 10 * 60 * 1000;
+    static CLIENT_SUBSCRIPTIONS_TTL = 3600;
+    static STREAM_TTL = 3600;
+    static COUNTER_TTL = 3600;
+    static STREAM_MAX_LENGTH = 20;
+    static STREAM_BATCH_SIZE = 20;
     static message(messageId) {
         return `${this.PREFIX}message:${messageId}`;
     }

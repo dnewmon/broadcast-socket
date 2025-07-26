@@ -11,12 +11,12 @@ export class ClusterManager {
     setupClusterEvents() {
         if (cluster.isPrimary) {
             cluster.on('exit', (worker, code, signal) => {
-                logWithTimestamp('warn', `Worker ${worker.process.pid} died (${signal || code}). Restarting...`);
+                logWithTimestamp('warn', `Worker ${worker.process.pid} died (${signal || code}). Restarting in 1 second...`);
                 this.workers.delete(worker.id);
                 this.workerStats.delete(worker.id);
                 setTimeout(() => {
                     this.forkWorker();
-                }, 250);
+                }, 1000);
             });
             cluster.on('message', (worker, message) => {
                 this.handleWorkerMessage(worker, message);
