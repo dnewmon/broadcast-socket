@@ -7,6 +7,7 @@ import { Client, ClientMessage, ServerMessage, ServerStats } from './types.js';
 import { RedisManager } from './redis.js';
 import { SubscriptionManager } from './subscription.js';
 import { BroadcastManager } from './broadcast.js';
+import { UserSessionManager } from './session.js';
 import { 
   getServerConfig, 
   validateMessage, 
@@ -23,6 +24,7 @@ export class BroadcastServer {
   private redis: RedisManager;
   private subscriptionManager: SubscriptionManager;
   private broadcastManager: BroadcastManager;
+  private sessionManager: UserSessionManager;
   private clients: Map<string, Client> = new Map();
   private startTime: number = Date.now();
   private config = getServerConfig();
@@ -36,6 +38,7 @@ export class BroadcastServer {
     this.server = new WebSocketServer({ server: this.httpServer });
     
     this.redis = new RedisManager(this.config.redisUrl);
+    this.sessionManager = new UserSessionManager(this.redis);
     this.subscriptionManager = new SubscriptionManager(this.redis);
     this.broadcastManager = new BroadcastManager(this.redis, this.subscriptionManager, this.clients);
     
@@ -94,8 +97,27 @@ export class BroadcastServer {
         return;
       }
 
+      // Extract streamName from URL query params, default to 'default'
+      const url = new URL(req.url || '', `ws://${req.headers.host}`);
+      const streamName = url.searchParams.get('streamName') || 'default';
+
+      // Create session and client after streamName is determined
+      this.initializeClientSession(ws, clientId, clientIp, streamName);
+    });
+
+    this.setupHeartbeat();
+    logWithTimestamp('info', `WebSocket server initialized`);
+  }
+
+  private async initializeClientSession(ws: WebSocket, clientId: string, clientIp: string, streamName: string): Promise<void> {
+    try {
+      // Get or create session for this stream
+      const sessionId = await this.sessionManager.getOrCreateSession(streamName);
+      
       const client: Client = {
         id: clientId,
+        sessionId: sessionId,
+        streamName: streamName,
         ws,
         subscriptions: new Set(),
         lastPing: Date.now(),
@@ -103,12 +125,15 @@ export class BroadcastServer {
       };
 
       this.clients.set(clientId, client);
-      logWithTimestamp('info', `[SERVER] Client connected: ${clientId} from ${clientIp}`);
+      await this.sessionManager.incrementConnectionCount(sessionId);
+      
+      logWithTimestamp('info', `[SERVER] Client connected: ${clientId} (session: ${sessionId}, stream: ${streamName}) from ${clientIp}`);
       logWithTimestamp('debug', `[SERVER] Total connected clients: ${this.clients.size}`);
 
       this.sendWelcomeMessage(client);
-      this.restoreClientSubscriptions(clientId);
+      await this.restoreClientSubscriptions(sessionId);
 
+      // Set up WebSocket event handlers
       ws.on('message', async (data: WebSocket.RawData) => {
         logWithTimestamp('debug', `[SERVER] Received message from client ${clientId}: ${data.toString()}`);
         await this.handleClientMessage(client, data);
@@ -128,10 +153,11 @@ export class BroadcastServer {
         logWithTimestamp('error', `WebSocket error for client ${clientId}:`, error);
         this.handleClientDisconnect(clientId, 1011, Buffer.from('Internal error'));
       });
-    });
 
-    this.setupHeartbeat();
-    logWithTimestamp('info', `WebSocket server initialized`);
+    } catch (error) {
+      logWithTimestamp('error', `[SERVER] Error initializing client session for ${clientId}:`, error);
+      ws.close(1011, 'Session initialization failed');
+    }
   }
 
   private async handleClientMessage(client: Client, data: WebSocket.RawData): Promise<void> {
@@ -170,17 +196,17 @@ export class BroadcastServer {
       return;
     }
 
-    logWithTimestamp('debug', `[SERVER] Processing subscription for client ${client.id} to channel: ${message.channel}`);
-    const subscribed = await this.subscriptionManager.subscribeClient(client.id, message.channel);
+    logWithTimestamp('debug', `[SERVER] Processing subscription for session ${client.sessionId} (client ${client.id}) to channel: ${message.channel}`);
+    const subscribed = await this.subscriptionManager.subscribeClient(client.sessionId, message.channel);
     
     if (subscribed) {
       client.subscriptions.add(message.channel);
-      logWithTimestamp('info', `[SERVER] Client ${client.id} subscribed to channel: ${message.channel}`);
+      logWithTimestamp('info', `[SERVER] Session ${client.sessionId} (client ${client.id}) subscribed to channel: ${message.channel}`);
       logWithTimestamp('debug', `[SERVER] Client ${client.id} now has ${client.subscriptions.size} subscriptions: [${Array.from(client.subscriptions).join(', ')}]`);
       
       await this.broadcastManager.deliverQueuedMessages(client.id);
     } else {
-      logWithTimestamp('warn', `[SERVER] Client ${client.id} was already subscribed to channel: ${message.channel}`);
+      logWithTimestamp('warn', `[SERVER] Session ${client.sessionId} (client ${client.id}) was already subscribed to channel: ${message.channel}`);
     }
 
     this.sendAckMessage(client, message.messageId);
@@ -192,11 +218,11 @@ export class BroadcastServer {
       return;
     }
 
-    const unsubscribed = await this.subscriptionManager.unsubscribeClient(client.id, message.channel);
+    const unsubscribed = await this.subscriptionManager.unsubscribeClient(client.sessionId, message.channel);
     
     if (unsubscribed) {
       client.subscriptions.delete(message.channel);
-      logWithTimestamp('info', `Client ${client.id} unsubscribed from channel: ${message.channel}`);
+      logWithTimestamp('info', `Session ${client.sessionId} (client ${client.id}) unsubscribed from channel: ${message.channel}`);
     }
 
     this.sendAckMessage(client, message.messageId);
@@ -226,6 +252,8 @@ export class BroadcastServer {
       data: {
         type: 'welcome',
         clientId: client.id,
+        sessionId: client.sessionId,
+        streamName: client.streamName,
         serverTime: Date.now()
       },
       timestamp: Date.now()
@@ -273,24 +301,30 @@ export class BroadcastServer {
     const client = this.clients.get(clientId);
     if (!client) return;
 
-    await this.subscriptionManager.unsubscribeClientFromAll(clientId);
-    this.broadcastManager.clearClientQueue(clientId);
+    await this.subscriptionManager.unsubscribeClientFromAll(client.sessionId);
+    this.broadcastManager.clearClientQueue(clientId); // This uses legacy method that converts to session
+    await this.sessionManager.decrementConnectionCount(client.sessionId);
     this.clients.delete(clientId);
 
-    logWithTimestamp('info', `Client disconnected: ${clientId} (code: ${code}, reason: ${reason.toString()})`);
+    logWithTimestamp('info', `Client disconnected: ${clientId} (session: ${client.sessionId}, stream: ${client.streamName}) (code: ${code}, reason: ${reason.toString()})`);
   }
 
-  private async restoreClientSubscriptions(clientId: string): Promise<void> {
+  private async restoreClientSubscriptions(sessionId: string): Promise<void> {
     try {
-      const subscriptions = await this.subscriptionManager.restoreClientSubscriptions(clientId);
-      const client = this.clients.get(clientId);
+      const subscriptions = await this.subscriptionManager.restoreClientSubscriptions(sessionId);
       
-      if (client && subscriptions.length > 0) {
-        subscriptions.forEach(channel => client.subscriptions.add(channel));
-        logWithTimestamp('info', `Restored ${subscriptions.length} subscriptions for client ${clientId}`);
+      if (subscriptions.length > 0) {
+        // Find client with this sessionId and restore their local subscriptions
+        for (const [clientId, client] of this.clients.entries()) {
+          if (client.sessionId === sessionId) {
+            subscriptions.forEach(channel => client.subscriptions.add(channel));
+            logWithTimestamp('info', `Restored ${subscriptions.length} subscriptions for session ${sessionId} (client ${clientId})`);
+            break;
+          }
+        }
       }
     } catch (error) {
-      logWithTimestamp('error', `Error restoring subscriptions for client ${clientId}:`, error);
+      logWithTimestamp('error', `Error restoring subscriptions for session ${sessionId}:`, error);
     }
   }
 
@@ -374,6 +408,7 @@ export class BroadcastServer {
 
     this.server.close();
     this.httpServer.close();
+    await this.sessionManager.stop();
     await this.redis.disconnect();
 
     logWithTimestamp('info', 'Server shutdown complete');

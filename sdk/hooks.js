@@ -6,7 +6,8 @@ const DEFAULT_OPTIONS = {
     reconnectInterval: 1000,
     heartbeatInterval: 30000,
     messageQueueSize: 100,
-    debug: false
+    debug: false,
+    streamName: 'default'
 };
 export function useBroadcastSocket(url, options = {}) {
     const config = { ...DEFAULT_OPTIONS, ...options };
@@ -84,9 +85,12 @@ export function useBroadcastSocket(url, options = {}) {
             return;
         }
         setState((prev) => ({ ...prev, connecting: true, error: null }));
-        log('Connecting to', url);
+        const wsUrl = new URL(url);
+        wsUrl.searchParams.set('streamName', config.streamName);
+        const finalUrl = wsUrl.toString();
+        log('Connecting to', finalUrl, 'with streamName:', config.streamName);
         try {
-            const socket = new WebSocket(url);
+            const socket = new WebSocket(finalUrl);
             socketRef.current = socket;
             socket.onopen = () => {
                 log('Connected');
@@ -136,7 +140,7 @@ export function useBroadcastSocket(url, options = {}) {
                 error: 'Failed to create connection'
             }));
         }
-    }, [url, state.connecting, state.connected, state.reconnectAttempt, config.reconnect, config.reconnectAttempts, log]);
+    }, [url, state.connecting, state.connected, state.reconnectAttempt, config.reconnect, config.reconnectAttempts, config.streamName, log]);
     const disconnect = useCallback(() => {
         log('Disconnecting');
         cleanup();

@@ -16,11 +16,14 @@ export declare class BroadcastManager {
     private deliverToAllClients;
     private deliverToClient;
     private sendAcknowledgment;
-    private queueMessage;
+    private queueMessageForSession;
+    deliverQueuedMessagesForSession(sessionId: string): Promise<void>;
     deliverQueuedMessages(clientId: string): Promise<void>;
     retryFailedDeliveries(): Promise<void>;
+    getQueuedMessageCountForSession(sessionId: string): number;
     getQueuedMessageCount(clientId: string): number;
     getTotalQueuedMessages(): number;
+    clearSessionQueue(sessionId: string): void;
     clearClientQueue(clientId: string): void;
     getMessageHistory(channel: string, limit?: number): Promise<BroadcastMessage[]>;
 }

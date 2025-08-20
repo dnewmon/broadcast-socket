@@ -5,6 +5,7 @@ export declare class BroadcastServer {
     private redis;
     private subscriptionManager;
     private broadcastManager;
+    private sessionManager;
     private clients;
     private startTime;
     private config;
@@ -13,6 +14,7 @@ export declare class BroadcastServer {
     constructor();
     private setupExpress;
     private setupWebSocketServer;
+    private initializeClientSession;
     private handleClientMessage;
     private handleSubscribe;
     private handleUnsubscribe;

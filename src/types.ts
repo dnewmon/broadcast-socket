@@ -3,6 +3,7 @@ export interface ClientMessage {
   channel?: string;
   data?: unknown;
   messageId?: string;
+  streamName?: string;
 }
 
 export interface ServerMessage {
@@ -17,6 +18,8 @@ import { WebSocket } from 'ws';
 
 export interface Client {
   id: string;
+  sessionId: string;
+  streamName: string;
   ws: WebSocket;
   subscriptions: Set<string>;
   lastPing: number;
@@ -66,4 +69,16 @@ export interface WorkerStatsData {
   connections?: number;
   messages?: number;
   uptime?: number;
+}
+
+export interface UserSession {
+  sessionId: string;
+  streamName: string;
+  createdAt: number;
+  lastActivity: number;
+  activeConnections: number;
+}
+
+export interface SessionLookup {
+  [streamName: string]: string; // streamName -> sessionId
 }

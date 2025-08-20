@@ -7,7 +7,7 @@ export class BroadcastManager {
   private redis: RedisManager;
   private subscriptionManager: SubscriptionManager;
   private clients: Map<string, Client>;
-  private messageQueue: Map<string, BroadcastMessage[]> = new Map();
+  private messageQueue: Map<string, BroadcastMessage[]> = new Map(); // sessionId -> messages
   private deduplicationCache: Set<string> = new Set();
 
   constructor(redis: RedisManager, subscriptionManager: SubscriptionManager, clients: Map<string, Client>) {
@@ -95,8 +95,9 @@ export class BroadcastManager {
     timestamp: number, 
     senderId?: string
   ): Promise<void> {
-    const subscribers = this.subscriptionManager.getChannelSubscribers(channel);
-    console.log(`[BROADCAST] Channel ${channel} has ${subscribers.length} subscribers: [${subscribers.join(', ')}]`);
+    // subscribers are now sessionIds, not clientIds
+    const subscribedSessions = this.subscriptionManager.getChannelSubscribers(channel);
+    console.log(`[BROADCAST] Channel ${channel} has ${subscribedSessions.length} subscribed sessions: [${subscribedSessions.join(', ')}]`);
     
     const serverMessage: ServerMessage = {
       type: 'message',
@@ -106,10 +107,21 @@ export class BroadcastManager {
       timestamp
     };
 
-    const targetClients = subscribers.filter(clientId => clientId !== senderId);
-    console.log(`[BROADCAST] Delivering to ${targetClients.length} clients (excluding sender ${senderId}): [${targetClients.join(', ')}]`);
+    // Find all active clients for subscribed sessions
+    const targetClientIds: string[] = [];
+    for (const [clientId, client] of this.clients.entries()) {
+      if (subscribedSessions.includes(client.sessionId)) {
+        // Exclude sender if senderId matches the client's ID or sessionId
+        if (senderId && (senderId === clientId || senderId === client.sessionId)) {
+          continue;
+        }
+        targetClientIds.push(clientId);
+      }
+    }
 
-    const deliveryPromises = targetClients.map(clientId => this.deliverToClient(clientId, serverMessage));
+    console.log(`[BROADCAST] Delivering to ${targetClientIds.length} active clients for subscribed sessions (excluding sender ${senderId}): [${targetClientIds.join(', ')}]`);
+
+    const deliveryPromises = targetClientIds.map(clientId => this.deliverToClient(clientId, serverMessage));
 
     const results = await Promise.allSettled(deliveryPromises);
     const failures = results.filter(r => r.status === 'rejected').length;
@@ -142,19 +154,13 @@ export class BroadcastManager {
     const client = this.clients.get(clientId);
     
     if (!client) {
-      console.log(`[BROADCAST] Client ${clientId} not found in clients map, queueing message`);
-      this.queueMessage(clientId, {
-        channel: message.channel || '',
-        data: message.data,
-        messageId: message.messageId || '',
-        timestamp: message.timestamp
-      });
+      console.log(`[BROADCAST] Client ${clientId} not found in clients map, cannot queue without session info`);
       return;
     }
 
     if (!client.isAlive) {
-      console.log(`[BROADCAST] Client ${clientId} is not alive, queueing message`);
-      this.queueMessage(clientId, {
+      console.log(`[BROADCAST] Client ${clientId} is not alive, queueing message for session ${client.sessionId}`);
+      this.queueMessageForSession(client.sessionId, {
         channel: message.channel || '',
         data: message.data,
         messageId: message.messageId || '',
@@ -170,8 +176,8 @@ export class BroadcastManager {
         console.log(`[BROADCAST] Message ${message.messageId} sent successfully to client ${clientId}`);
         await this.sendAcknowledgment(client, message.messageId);
       } else {
-        console.log(`[BROADCAST] Client ${clientId} WebSocket not ready (state: ${client.ws.readyState}), queueing message`);
-        this.queueMessage(clientId, {
+        console.log(`[BROADCAST] Client ${clientId} WebSocket not ready (state: ${client.ws.readyState}), queueing message for session ${client.sessionId}`);
+        this.queueMessageForSession(client.sessionId, {
           channel: message.channel || '',
           data: message.data,
           messageId: message.messageId || '',
@@ -180,7 +186,7 @@ export class BroadcastManager {
       }
     } catch (error) {
       console.error(`[BROADCAST] Error delivering message to client ${clientId}:`, error);
-      this.queueMessage(clientId, {
+      this.queueMessageForSession(client.sessionId, {
         channel: message.channel || '',
         data: message.data,
         messageId: message.messageId || '',
@@ -207,35 +213,45 @@ export class BroadcastManager {
     }
   }
 
-  private queueMessage(clientId: string, message: BroadcastMessage): void {
-    console.log(`[BROADCAST] Queueing message ${message.messageId} for client ${clientId}`);
+  private queueMessageForSession(sessionId: string, message: BroadcastMessage): void {
+    console.log(`[BROADCAST] Queueing message ${message.messageId} for session ${sessionId}`);
     
-    if (!this.messageQueue.has(clientId)) {
-      this.messageQueue.set(clientId, []);
+    if (!this.messageQueue.has(sessionId)) {
+      this.messageQueue.set(sessionId, []);
     }
 
-    const queue = this.messageQueue.get(clientId)!;
+    const queue = this.messageQueue.get(sessionId)!;
     queue.push(message);
 
     if (queue.length > 100) {
       const dropped = queue.shift();
-      console.log(`[BROADCAST] Queue full for client ${clientId}, dropped message ${dropped?.messageId}`);
+      console.log(`[BROADCAST] Queue full for session ${sessionId}, dropped message ${dropped?.messageId}`);
     }
     
-    console.log(`[BROADCAST] Client ${clientId} now has ${queue.length} queued messages`);
+    console.log(`[BROADCAST] Session ${sessionId} now has ${queue.length} queued messages`);
   }
 
-  async deliverQueuedMessages(clientId: string): Promise<void> {
-    const queue = this.messageQueue.get(clientId);
+  async deliverQueuedMessagesForSession(sessionId: string): Promise<void> {
+    const queue = this.messageQueue.get(sessionId);
     if (!queue || queue.length === 0) {
       return;
     }
 
-    const client = this.clients.get(clientId);
-    if (!client || !client.isAlive) {
+    // Find any active client for this session
+    let activeClientId: string | null = null;
+    for (const [clientId, client] of this.clients.entries()) {
+      if (client.sessionId === sessionId && client.isAlive) {
+        activeClientId = clientId;
+        break;
+      }
+    }
+
+    if (!activeClientId) {
+      console.log(`[BROADCAST] No active client found for session ${sessionId}, keeping messages queued`);
       return;
     }
 
+    console.log(`[BROADCAST] Delivering ${queue.length} queued messages for session ${sessionId} to client ${activeClientId}`);
     const messages = queue.splice(0);
     
     for (const queuedMessage of messages) {
@@ -247,25 +263,39 @@ export class BroadcastManager {
         timestamp: queuedMessage.timestamp
       };
 
-      await this.deliverToClient(clientId, serverMessage);
+      await this.deliverToClient(activeClientId, serverMessage);
     }
 
     if (queue.length === 0) {
-      this.messageQueue.delete(clientId);
+      this.messageQueue.delete(sessionId);
+    }
+  }
+
+  // Legacy method for backward compatibility - converts clientId to sessionId
+  async deliverQueuedMessages(clientId: string): Promise<void> {
+    const client = this.clients.get(clientId);
+    if (client) {
+      await this.deliverQueuedMessagesForSession(client.sessionId);
     }
   }
 
   async retryFailedDeliveries(): Promise<void> {
-    const retryPromises = Array.from(this.messageQueue.keys()).map(clientId => 
-      this.deliverQueuedMessages(clientId)
+    const retryPromises = Array.from(this.messageQueue.keys()).map(sessionId => 
+      this.deliverQueuedMessagesForSession(sessionId)
     );
 
     await Promise.allSettled(retryPromises);
   }
 
-  getQueuedMessageCount(clientId: string): number {
-    const queue = this.messageQueue.get(clientId);
+  getQueuedMessageCountForSession(sessionId: string): number {
+    const queue = this.messageQueue.get(sessionId);
     return queue ? queue.length : 0;
+  }
+
+  // Legacy method for backward compatibility
+  getQueuedMessageCount(clientId: string): number {
+    const client = this.clients.get(clientId);
+    return client ? this.getQueuedMessageCountForSession(client.sessionId) : 0;
   }
 
   getTotalQueuedMessages(): number {
@@ -276,8 +306,16 @@ export class BroadcastManager {
     return total;
   }
 
+  clearSessionQueue(sessionId: string): void {
+    this.messageQueue.delete(sessionId);
+  }
+
+  // Legacy method for backward compatibility
   clearClientQueue(clientId: string): void {
-    this.messageQueue.delete(clientId);
+    const client = this.clients.get(clientId);
+    if (client) {
+      this.clearSessionQueue(client.sessionId);
+    }
   }
 
   async getMessageHistory(channel: string, limit: number = 50): Promise<BroadcastMessage[]> {

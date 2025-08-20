@@ -3,98 +3,98 @@ import { RedisManager } from './redis.js';
 
 export class SubscriptionManager {
   private channelSubscriptions: Map<string, Set<string>> = new Map();
-  private clientSubscriptions: Map<string, Set<string>> = new Map();
+  private sessionSubscriptions: Map<string, Set<string>> = new Map(); // sessionId -> channels
   private redis: RedisManager;
 
   constructor(redis: RedisManager) {
     this.redis = redis;
   }
 
-  async subscribeClient(clientId: string, channel: string): Promise<boolean> {
-    console.log(`[SUBSCRIPTION] Attempting to subscribe client ${clientId} to channel: ${channel}`);
+  async subscribeClient(sessionId: string, channel: string): Promise<boolean> {
+    console.log(`[SUBSCRIPTION] Attempting to subscribe session ${sessionId} to channel: ${channel}`);
     
     if (!this.channelSubscriptions.has(channel)) {
       console.log(`[SUBSCRIPTION] Creating new channel: ${channel}`);
       this.channelSubscriptions.set(channel, new Set());
     }
 
-    if (!this.clientSubscriptions.has(clientId)) {
-      console.log(`[SUBSCRIPTION] Creating subscription set for new client: ${clientId}`);
-      this.clientSubscriptions.set(clientId, new Set());
+    if (!this.sessionSubscriptions.has(sessionId)) {
+      console.log(`[SUBSCRIPTION] Creating subscription set for new session: ${sessionId}`);
+      this.sessionSubscriptions.set(sessionId, new Set());
     }
 
     const channelSubscribers = this.channelSubscriptions.get(channel)!;
-    const clientChannels = this.clientSubscriptions.get(clientId)!;
+    const sessionChannels = this.sessionSubscriptions.get(sessionId)!;
 
-    if (channelSubscribers.has(clientId)) {
-      console.log(`[SUBSCRIPTION] Client ${clientId} already subscribed to channel: ${channel}`);
+    if (channelSubscribers.has(sessionId)) {
+      console.log(`[SUBSCRIPTION] Session ${sessionId} already subscribed to channel: ${channel}`);
       return false;
     }
 
-    channelSubscribers.add(clientId);
-    clientChannels.add(channel);
+    channelSubscribers.add(sessionId);
+    sessionChannels.add(channel);
 
-    console.log(`[SUBSCRIPTION] Successfully subscribed client ${clientId} to channel: ${channel}`);
+    console.log(`[SUBSCRIPTION] Successfully subscribed session ${sessionId} to channel: ${channel}`);
     console.log(`[SUBSCRIPTION] Channel ${channel} now has ${channelSubscribers.size} subscribers: [${Array.from(channelSubscribers).join(', ')}]`);
-    console.log(`[SUBSCRIPTION] Client ${clientId} now subscribed to ${clientChannels.size} channels: [${Array.from(clientChannels).join(', ')}]`);
+    console.log(`[SUBSCRIPTION] Session ${sessionId} now subscribed to ${sessionChannels.size} channels: [${Array.from(sessionChannels).join(', ')}]`);
 
-    await this.persistClientSubscriptions(clientId);
+    await this.persistSessionSubscriptions(sessionId);
     return true;
   }
 
-  async unsubscribeClient(clientId: string, channel: string): Promise<boolean> {
-    console.log(`[SUBSCRIPTION] Attempting to unsubscribe client ${clientId} from channel: ${channel}`);
+  async unsubscribeClient(sessionId: string, channel: string): Promise<boolean> {
+    console.log(`[SUBSCRIPTION] Attempting to unsubscribe session ${sessionId} from channel: ${channel}`);
     
     const channelSubscribers = this.channelSubscriptions.get(channel);
-    const clientChannels = this.clientSubscriptions.get(clientId);
+    const sessionChannels = this.sessionSubscriptions.get(sessionId);
 
-    if (!channelSubscribers || !clientChannels) {
-      console.log(`[SUBSCRIPTION] Unsubscribe failed: channel or client not found`);
+    if (!channelSubscribers || !sessionChannels) {
+      console.log(`[SUBSCRIPTION] Unsubscribe failed: channel or session not found`);
       return false;
     }
 
-    if (!channelSubscribers.has(clientId)) {
-      console.log(`[SUBSCRIPTION] Client ${clientId} was not subscribed to channel: ${channel}`);
+    if (!channelSubscribers.has(sessionId)) {
+      console.log(`[SUBSCRIPTION] Session ${sessionId} was not subscribed to channel: ${channel}`);
       return false;
     }
 
-    channelSubscribers.delete(clientId);
-    clientChannels.delete(channel);
+    channelSubscribers.delete(sessionId);
+    sessionChannels.delete(channel);
 
-    console.log(`[SUBSCRIPTION] Successfully unsubscribed client ${clientId} from channel: ${channel}`);
+    console.log(`[SUBSCRIPTION] Successfully unsubscribed session ${sessionId} from channel: ${channel}`);
 
     if (channelSubscribers.size === 0) {
       console.log(`[SUBSCRIPTION] Channel ${channel} has no more subscribers, removing`);
       this.channelSubscriptions.delete(channel);
     }
 
-    if (clientChannels.size === 0) {
-      console.log(`[SUBSCRIPTION] Client ${clientId} has no more subscriptions, removing`);
-      this.clientSubscriptions.delete(clientId);
-      await this.redis.removeClientSubscriptions(clientId);
+    if (sessionChannels.size === 0) {
+      console.log(`[SUBSCRIPTION] Session ${sessionId} has no more subscriptions, removing`);
+      this.sessionSubscriptions.delete(sessionId);
+      await this.redis.removeClientSubscriptions(sessionId);
     } else {
-      await this.persistClientSubscriptions(clientId);
+      await this.persistSessionSubscriptions(sessionId);
     }
 
     return true;
   }
 
-  async unsubscribeClientFromAll(clientId: string): Promise<string[]> {
-    console.log(`[SUBSCRIPTION] Unsubscribing client ${clientId} from all channels`);
+  async unsubscribeClientFromAll(sessionId: string): Promise<string[]> {
+    console.log(`[SUBSCRIPTION] Unsubscribing session ${sessionId} from all channels`);
     
-    const clientChannels = this.clientSubscriptions.get(clientId);
-    if (!clientChannels) {
-      console.log(`[SUBSCRIPTION] Client ${clientId} has no subscriptions to remove`);
+    const sessionChannels = this.sessionSubscriptions.get(sessionId);
+    if (!sessionChannels) {
+      console.log(`[SUBSCRIPTION] Session ${sessionId} has no subscriptions to remove`);
       return [];
     }
 
-    const unsubscribedChannels = Array.from(clientChannels);
-    console.log(`[SUBSCRIPTION] Removing client ${clientId} from ${unsubscribedChannels.length} channels: [${unsubscribedChannels.join(', ')}]`);
+    const unsubscribedChannels = Array.from(sessionChannels);
+    console.log(`[SUBSCRIPTION] Removing session ${sessionId} from ${unsubscribedChannels.length} channels: [${unsubscribedChannels.join(', ')}]`);
 
-    for (const channel of clientChannels) {
+    for (const channel of sessionChannels) {
       const channelSubscribers = this.channelSubscriptions.get(channel);
       if (channelSubscribers) {
-        channelSubscribers.delete(clientId);
+        channelSubscribers.delete(sessionId);
         if (channelSubscribers.size === 0) {
           console.log(`[SUBSCRIPTION] Channel ${channel} now empty, removing`);
           this.channelSubscriptions.delete(channel);
@@ -102,10 +102,10 @@ export class SubscriptionManager {
       }
     }
 
-    this.clientSubscriptions.delete(clientId);
-    await this.redis.removeClientSubscriptions(clientId);
+    this.sessionSubscriptions.delete(sessionId);
+    await this.redis.removeClientSubscriptions(sessionId);
 
-    console.log(`[SUBSCRIPTION] Successfully unsubscribed client ${clientId} from all channels`);
+    console.log(`[SUBSCRIPTION] Successfully unsubscribed session ${sessionId} from all channels`);
     return unsubscribedChannels;
   }
 
@@ -116,14 +116,14 @@ export class SubscriptionManager {
     return result;
   }
 
-  getClientSubscriptions(clientId: string): string[] {
-    const subscriptions = this.clientSubscriptions.get(clientId);
+  getSessionSubscriptions(sessionId: string): string[] {
+    const subscriptions = this.sessionSubscriptions.get(sessionId);
     return subscriptions ? Array.from(subscriptions) : [];
   }
 
-  isClientSubscribed(clientId: string, channel: string): boolean {
-    const clientChannels = this.clientSubscriptions.get(clientId);
-    return clientChannels ? clientChannels.has(channel) : false;
+  isSessionSubscribed(sessionId: string, channel: string): boolean {
+    const sessionChannels = this.sessionSubscriptions.get(sessionId);
+    return sessionChannels ? sessionChannels.has(channel) : false;
   }
 
   getAllChannels(): string[] {
@@ -150,36 +150,36 @@ export class SubscriptionManager {
     return stats;
   }
 
-  async restoreClientSubscriptions(clientId: string): Promise<string[]> {
+  async restoreClientSubscriptions(sessionId: string): Promise<string[]> {
     try {
-      const storedSubscriptions = await this.redis.getClientSubscriptions(clientId);
+      const storedSubscriptions = await this.redis.getClientSubscriptions(sessionId);
       
       // Ensure we have an array before iterating
       if (Array.isArray(storedSubscriptions)) {
         for (const channel of storedSubscriptions) {
-          await this.subscribeClient(clientId, channel);
+          await this.subscribeClient(sessionId, channel);
         }
         return storedSubscriptions;
       }
       
       return [];
     } catch (error) {
-      console.error(`Error restoring subscriptions for client ${clientId}:`, error);
+      console.error(`Error restoring subscriptions for session ${sessionId}:`, error);
       return [];
     }
   }
 
-  private async persistClientSubscriptions(clientId: string): Promise<void> {
-    const subscriptions = this.getClientSubscriptions(clientId);
-    await this.redis.storeClientSubscriptions(clientId, subscriptions);
+  private async persistSessionSubscriptions(sessionId: string): Promise<void> {
+    const subscriptions = this.getSessionSubscriptions(sessionId);
+    await this.redis.storeClientSubscriptions(sessionId, subscriptions);
   }
 
   exportState(): SubscriptionState[] {
     const states: SubscriptionState[] = [];
     
-    for (const [clientId, channels] of this.clientSubscriptions.entries()) {
+    for (const [sessionId, channels] of this.sessionSubscriptions.entries()) {
       states.push({
-        clientId,
+        clientId: sessionId, // Keep interface same but use sessionId
         channels: Array.from(channels),
         lastActivity: Date.now()
       });
@@ -191,7 +191,7 @@ export class SubscriptionManager {
   async importState(states: SubscriptionState[]): Promise<void> {
     for (const state of states) {
       for (const channel of state.channels) {
-        await this.subscribeClient(state.clientId, channel);
+        await this.subscribeClient(state.clientId, channel); // clientId is actually sessionId here
       }
     }
   }

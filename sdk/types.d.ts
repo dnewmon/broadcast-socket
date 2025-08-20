@@ -5,6 +5,7 @@ export interface BroadcastSocketOptions {
     heartbeatInterval?: number;
     messageQueueSize?: number;
     debug?: boolean;
+    streamName?: string;
 }
 export interface BroadcastSocketState {
     connected: boolean;
