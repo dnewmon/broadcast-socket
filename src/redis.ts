@@ -1,4 +1,5 @@
 import { createClient, RedisClientType } from 'redis';
+import { RedisKeys } from './redis_keys.js';
 
 export class RedisManager {
   private client: RedisClientType;
@@ -75,7 +76,7 @@ export class RedisManager {
   }
 
   async storeMessage(messageId: string, message: unknown, ttl: number = 3600): Promise<void> {
-    const key = `message:${messageId}`;
+    const key = RedisKeys.message(messageId);
     const messageStr = JSON.stringify(message);
     console.log(`[REDIS] Storing message with key ${key} (TTL: ${ttl}s):`, messageStr);
     await this.client.setEx(key, ttl, messageStr);
@@ -83,12 +84,12 @@ export class RedisManager {
   }
 
   async getMessage(messageId: string): Promise<unknown | null> {
-    const message = await this.client.get(`message:${messageId}`);
+    const message = await this.client.get(RedisKeys.message(messageId));
     return message ? JSON.parse(message) : null;
   }
 
   async storeClientSubscriptions(clientId: string, subscriptions: string[]): Promise<void> {
-    const key = `client:${clientId}:subscriptions`;
+    const key = RedisKeys.clientSubscriptions(clientId);
     console.log(`[REDIS] Storing subscriptions for client ${clientId}:`, subscriptions);
     
     await this.client.del(key);
@@ -102,7 +103,7 @@ export class RedisManager {
   }
 
   async getClientSubscriptions(clientId: string): Promise<string[]> {
-    const key = `client:${clientId}:subscriptions`;
+    const key = RedisKeys.clientSubscriptions(clientId);
     console.log(`[REDIS] Retrieving subscriptions for client ${clientId}`);
     const subscriptions = await this.client.sMembers(key);
     console.log(`[REDIS] Retrieved ${subscriptions.length} subscriptions for client ${clientId}:`, subscriptions);
@@ -110,7 +111,7 @@ export class RedisManager {
   }
 
   async removeClientSubscriptions(clientId: string): Promise<void> {
-    await this.client.del(`client:${clientId}:subscriptions`);
+    await this.client.del(RedisKeys.clientSubscriptions(clientId));
   }
 
   async incrementCounter(key: string, ttl: number = 3600): Promise<number> {

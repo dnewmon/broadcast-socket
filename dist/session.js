@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logWithTimestamp } from './utils.js';
+import { RedisKeys } from './redis_keys.js';
 export class UserSessionManager {
     redis;
     sessionTtl = 24 * 60 * 60;
@@ -35,7 +36,7 @@ export class UserSessionManager {
     }
     async updateSessionActivity(sessionId) {
         try {
-            const sessionKey = `session:${sessionId}`;
+            const sessionKey = RedisKeys.session(sessionId);
             const client = this.redis.getClient();
             const exists = await client.exists(sessionKey);
             if (!exists) {
@@ -52,7 +53,7 @@ export class UserSessionManager {
     }
     async incrementConnectionCount(sessionId) {
         try {
-            const sessionKey = `session:${sessionId}`;
+            const sessionKey = RedisKeys.session(sessionId);
             const client = this.redis.getClient();
             await client.hIncrBy(sessionKey, 'activeConnections', 1);
             await this.updateSessionActivity(sessionId);
@@ -64,7 +65,7 @@ export class UserSessionManager {
     }
     async decrementConnectionCount(sessionId) {
         try {
-            const sessionKey = `session:${sessionId}`;
+            const sessionKey = RedisKeys.session(sessionId);
             const client = this.redis.getClient();
             const connections = await client.hIncrBy(sessionKey, 'activeConnections', -1);
             if (connections < 0) {
@@ -79,7 +80,7 @@ export class UserSessionManager {
     }
     async getSession(sessionId) {
         try {
-            const sessionKey = `session:${sessionId}`;
+            const sessionKey = RedisKeys.session(sessionId);
             const client = this.redis.getClient();
             const sessionData = await client.hGetAll(sessionKey);
             if (!sessionData || Object.keys(sessionData).length === 0) {
@@ -100,11 +101,11 @@ export class UserSessionManager {
     }
     async getSessionIdByStream(streamName) {
         try {
-            const streamKey = `stream:${streamName}`;
+            const streamKey = RedisKeys.stream(streamName);
             const client = this.redis.getClient();
             const sessionId = await client.get(streamKey);
             if (sessionId) {
-                const sessionExists = await client.exists(`session:${sessionId}`);
+                const sessionExists = await client.exists(RedisKeys.session(sessionId));
                 if (sessionExists) {
                     return sessionId;
                 }
@@ -122,8 +123,8 @@ export class UserSessionManager {
     }
     async createSession(session) {
         try {
-            const sessionKey = `session:${session.sessionId}`;
-            const streamKey = `stream:${session.streamName}`;
+            const sessionKey = RedisKeys.session(session.sessionId);
+            const streamKey = RedisKeys.stream(session.streamName);
             const client = this.redis.getClient();
             await client.hSet(sessionKey, {
                 sessionId: session.sessionId,
@@ -142,7 +143,7 @@ export class UserSessionManager {
     }
     async getAllSessions() {
         try {
-            const pattern = 'session:*';
+            const pattern = RedisKeys.sessionPattern();
             const client = this.redis.getClient();
             const keys = await client.keys(pattern);
             const sessions = [];
@@ -195,8 +196,8 @@ export class UserSessionManager {
             const session = await this.getSession(sessionId);
             if (session) {
                 const client = this.redis.getClient();
-                await client.del(`session:${sessionId}`);
-                await client.del(`stream:${session.streamName}`);
+                await client.del(RedisKeys.session(sessionId));
+                await client.del(RedisKeys.stream(session.streamName));
                 logWithTimestamp('debug', `[SESSION] Deleted session ${sessionId} for stream ${session.streamName}`);
             }
         }

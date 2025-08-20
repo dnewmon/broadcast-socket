@@ -1,4 +1,5 @@
 import { createClient } from 'redis';
+import { RedisKeys } from './redis_keys.js';
 export class RedisManager {
     client;
     publisher;
@@ -63,18 +64,18 @@ export class RedisManager {
         }
     }
     async storeMessage(messageId, message, ttl = 3600) {
-        const key = `message:${messageId}`;
+        const key = RedisKeys.message(messageId);
         const messageStr = JSON.stringify(message);
         console.log(`[REDIS] Storing message with key ${key} (TTL: ${ttl}s):`, messageStr);
         await this.client.setEx(key, ttl, messageStr);
         console.log(`[REDIS] Message ${messageId} stored successfully`);
     }
     async getMessage(messageId) {
-        const message = await this.client.get(`message:${messageId}`);
+        const message = await this.client.get(RedisKeys.message(messageId));
         return message ? JSON.parse(message) : null;
     }
     async storeClientSubscriptions(clientId, subscriptions) {
-        const key = `client:${clientId}:subscriptions`;
+        const key = RedisKeys.clientSubscriptions(clientId);
         console.log(`[REDIS] Storing subscriptions for client ${clientId}:`, subscriptions);
         await this.client.del(key);
         if (subscriptions.length > 0) {
@@ -87,14 +88,14 @@ export class RedisManager {
         }
     }
     async getClientSubscriptions(clientId) {
-        const key = `client:${clientId}:subscriptions`;
+        const key = RedisKeys.clientSubscriptions(clientId);
         console.log(`[REDIS] Retrieving subscriptions for client ${clientId}`);
         const subscriptions = await this.client.sMembers(key);
         console.log(`[REDIS] Retrieved ${subscriptions.length} subscriptions for client ${clientId}:`, subscriptions);
         return subscriptions;
     }
     async removeClientSubscriptions(clientId) {
-        await this.client.del(`client:${clientId}:subscriptions`);
+        await this.client.del(RedisKeys.clientSubscriptions(clientId));
     }
     async incrementCounter(key, ttl = 3600) {
         const count = await this.client.incr(key);

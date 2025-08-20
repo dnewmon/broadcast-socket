@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { RedisKeys } from './redis_keys.js';
 export class BroadcastManager {
     redis;
     subscriptionManager;
@@ -13,7 +14,7 @@ export class BroadcastManager {
     }
     setupRedisSubscriptions() {
         console.log('[BROADCAST] Setting up Redis subscriptions for broadcast:* pattern');
-        this.redis.subscribeToChannel('broadcast:*', (message) => {
+        this.redis.subscribeToChannel(RedisKeys.broadcastChannelPattern(), (message) => {
             try {
                 console.log('[BROADCAST] Received Redis message:', message);
                 const broadcastMessage = JSON.parse(message);
@@ -39,10 +40,10 @@ export class BroadcastManager {
         };
         console.log(`[BROADCAST] Storing message in Redis: ${messageId}`);
         await this.redis.storeMessage(messageId, broadcastMessage);
-        console.log(`[BROADCAST] Publishing to Redis channel: broadcast:${channel}`);
-        await this.redis.publishMessage(`broadcast:${channel}`, broadcastMessage);
-        await this.redis.incrementCounter('stats:total_messages');
-        await this.redis.incrementCounter(`stats:channel:${channel}:messages`);
+        console.log(`[BROADCAST] Publishing to Redis channel: ${RedisKeys.broadcastChannel(channel)}`);
+        await this.redis.publishMessage(RedisKeys.broadcastChannel(channel), broadcastMessage);
+        await this.redis.incrementCounter(RedisKeys.statsTotalMessages());
+        await this.redis.incrementCounter(RedisKeys.statsChannelMessages(channel));
         console.log(`[BROADCAST] Successfully broadcast message ${messageId} to channel ${channel}`);
         return messageId;
     }
@@ -250,11 +251,12 @@ export class BroadcastManager {
     }
     async getMessageHistory(channel, limit = 50) {
         try {
-            const pattern = `message:*`;
+            const pattern = RedisKeys.messagePattern();
             const keys = await this.redis.getClient().keys(pattern);
             const messages = [];
             for (const key of keys.slice(-limit)) {
-                const message = await this.redis.getMessage(key.replace('message:', ''));
+                const messageId = key.replace(RedisKeys.getPrefix() + 'message:', '');
+                const message = await this.redis.getMessage(messageId);
                 if (message && typeof message === 'object' && message !== null) {
                     const broadcastMessage = message;
                     if (channel === '*' || broadcastMessage.channel === channel) {

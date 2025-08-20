@@ -52,7 +52,7 @@ describe('BroadcastManager', () => {
       expect(messageId).toBeTruthy();
       expect(mockRedis.storeMessage).toHaveBeenCalled();
       expect(mockRedis.publishMessage).toHaveBeenCalledWith(
-        `broadcast:${channel}`,
+        `websockets:broadcast:${channel}`,
         expect.objectContaining({
           channel,
           data,
@@ -72,7 +72,7 @@ describe('BroadcastManager', () => {
       
       expect(messageId).toBeTruthy();
       expect(mockRedis.publishMessage).toHaveBeenCalledWith(
-        'broadcast:*',
+        'websockets:broadcast:*',
         expect.objectContaining({
           channel: '*',
           data
@@ -90,8 +90,8 @@ describe('BroadcastManager', () => {
 
       await broadcastManager.broadcastToChannel(channel, data);
       
-      expect(mockRedis.incrementCounter).toHaveBeenCalledWith('stats:total_messages');
-      expect(mockRedis.incrementCounter).toHaveBeenCalledWith(`stats:channel:${channel}:messages`);
+      expect(mockRedis.incrementCounter).toHaveBeenCalledWith('websockets:stats:total_messages');
+      expect(mockRedis.incrementCounter).toHaveBeenCalledWith(`websockets:stats:channel:${channel}:messages`);
     });
   });
 
@@ -122,7 +122,7 @@ describe('BroadcastManager', () => {
       const channel = 'test-channel';
       
       mockRedis.getClient.mockReturnValue({
-        keys: jest.fn().mockResolvedValue(['message:1', 'message:2'])
+        keys: jest.fn().mockResolvedValue(['websockets:message:1', 'websockets:message:2'])
       } as any);
       
       mockRedis.getMessage
