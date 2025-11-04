@@ -1,0 +1,42 @@
+{
+    "name": "@broadcast-socket/frontend",
+    "version": "1.0.0",
+    "description": "Broadcast Socket Frontend Client - React hook for channel-based WebSocket communication",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "example:dev": "npm run dev -w @broadcast-socket/example",
+        "example:build": "npm run build -w @broadcast-socket/example"
+    },
+    "peerDependencies": {
+        "react": "^18.0.0"
+    },
+    "dependencies": {
+        "socket.io-client": "^4.6.1"
+    },
+    "devDependencies": {
+        "@types/react": "^18.2.48",
+        "typescript": "^5.3.3"
+    },
+    "keywords": [
+        "websocket",
+        "socket.io",
+        "react",
+        "hook",
+        "channel",
+        "real-time"
+    ]
+}

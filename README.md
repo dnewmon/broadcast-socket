@@ -1,607 +1,250 @@
-# Broadcast Socket Service
+# Broadcast Socket
 
-A horizontally scalable WebSocket broadcasting service built with Node.js that supports fan-out messaging patterns with CORS-enabled connections.
+A broadcast websocket server system with channel support, built with Node.js, Express, Socket.IO, React, and TypeScript.
 
-## Table of Contents
+**GitHub Repository**: [github.com/dnewmon/broadcast-socket](https://github.com/dnewmon/broadcast-socket)
 
-- [Features & Functionality](#features--functionality)
-  - [Core Features](#core-features)
-  - [WebSocket Message Types](#websocket-message-types)
-  - [HTTP Endpoints](#http-endpoints)
-  - [HTTP Broadcasting](#http-broadcasting)
-- [Requirements](#requirements)
-  - [System Requirements](#system-requirements)
-  - [Dependencies](#dependencies)
-- [Installation & Usage](#installation--usage)
-  - [Server Installation](#server-installation)
-  - [Environment Configuration](#environment-configuration)
-  - [Local Development with Redis](#local-development-with-redis)
-  - [Running the Server](#running-the-server)
-- [React SDK Usage](#react-sdk-usage)
-  - [Installation](#installation)
-  - [Basic Setup](#basic-setup)
-  - [Using Hooks](#using-hooks)
-  - [useSubscription Hook API](#usesubscription-hook-api)
-  - [Advanced Configuration](#advanced-configuration)
-- [Docker Container](#docker-container)
-  - [Building the Container](#building-the-container)
-  - [Running the Container](#running-the-container)
-  - [Docker Compose Setup](#docker-compose-setup)
-- [Development Commands](#development-commands)
-- [API Reference](#api-reference)
-  - [WebSocket Message Format](#websocket-message-format)
-  - [React SDK Types](#react-sdk-types)
-- [Limitations](#limitations)
-  - [Technical Limitations](#technical-limitations)
-  - [Scaling Limitations](#scaling-limitations)
-  - [Feature Limitations](#feature-limitations)
-  - [Browser Limitations](#browser-limitations)
-- [Performance Considerations](#performance-considerations)
-- [License](#license)
+## Features
 
-## Features & Functionality
+-   **Channel-based communication**: Connect to specific channels using query parameters
+-   **Real-time messaging**: Send and receive messages in real-time within channels
+-   **REST API proxy endpoint**: Send messages to channels via HTTP POST requests
+-   **React Hook Library**: Installable npm package with `useBroadcastSocket()` hook
+-   **TypeScript**: Fully typed codebase for both frontend and backend
+-   **CLI wrapper**: Easy-to-use command-line interface for the server
 
-### Core Features
-- **WebSocket Broadcasting**: Real-time message broadcasting to all connected clients
-- **Channel-Based Subscriptions**: Subscribe to specific channels/topics for targeted messaging
-- **Horizontal Scaling**: Multi-process architecture with Redis for inter-process communication
-- **CORS Support**: Cross-origin WebSocket connections with configurable origins
-- **React SDK**: TypeScript-first React hooks and context providers
-- **Automatic Reconnection**: Built-in reconnection with exponential backoff
-- **Message Persistence**: Redis-based message storage for reliability
-- **Health Monitoring**: HTTP endpoints for health checks and statistics
-
-### WebSocket Message Types
-- `subscribe` - Subscribe to a channel
-- `unsubscribe` - Unsubscribe from a channel  
-- `broadcast` - Send a message to a channel
-- `message` - Receive broadcasted messages
-- `ack` - Message acknowledgments
-- `error` - Error notifications
-- `ping` - Connection health checks
-
-### HTTP Endpoints
-- `GET /health` - Health check endpoint
-- `POST /broadcast` - HTTP-based broadcasting
-- `GET /stats` - Connection and performance statistics
-
-### HTTP Broadcasting
-
-Send messages to channels via HTTP POST requests without needing a WebSocket connection.
-
-#### Endpoint
-```
-POST /broadcast
-```
-
-#### Request Format
-```json
-{
-  "channel": "channel-name",
-  "data": {
-    "message": "Hello World!",
-    "timestamp": 1234567890,
-    "user": "john_doe"
-  }
-}
-```
-
-#### Response Format
-```json
-{
-  "messageId": "unique-message-id-uuid",
-  "timestamp": 1234567890
-}
-```
-
-#### Examples
-
-**Using curl:**
-```bash
-curl -X POST http://localhost:8080/broadcast \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channel": "chat-room",
-    "data": {
-      "message": "Hello from HTTP!",
-      "user": "api-client"
-    }
-  }'
-```
-
-**Using Python requests:**
-```python
-import requests
-
-url = "http://localhost:8080/broadcast"
-payload = {
-    "channel": "chat-room", 
-    "data": {
-        "message": "Hello from Python!",
-        "user": "python-client",
-        "timestamp": 1234567890
-    }
-}
-
-response = requests.post(url, json=payload)
-result = response.json()
-print(f"Message sent with ID: {result['messageId']}")
-```
-
-#### Error Responses
-- `400 Bad Request` - Missing channel or data fields
-- `500 Internal Server Error` - Server error during broadcast
-
-## Requirements
-
-### System Requirements
-- **Node.js**: >= 22.0.0
-- **Redis**: >= 6.0 (for message persistence and inter-process communication)
-- **Memory**: Minimum 512MB RAM (scales with concurrent connections)
-
-### Dependencies
-- `ws` - WebSocket server implementation
-- `redis` - Redis client for message persistence
-- `express` - HTTP server for health checks
-- `cors` - CORS middleware
-- `uuid` - Unique identifier generation
-
-## Installation & Usage
-
-### Server Installation
+## Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd broadcast-socket
+npm install ./
+```
 
-# Install dependencies
-npm install
+This will install all dependencies for the backend, frontend library, and example app.
 
-# Build the project
+## Building
+
+```bash
 npm run build
 ```
 
-### Environment Configuration
+This will compile TypeScript for all packages.
 
-Create a `.env` file or set environment variables:
+## Usage
 
-```bash
-PORT=8080                    # WebSocket server port
-REDIS_URL=redis://localhost:6379  # Redis connection string
-CORS_ORIGIN=*               # CORS allowed origins (comma-separated)
-WORKERS=4                   # Number of worker processes (default: CPU cores)
-NODE_ENV=production         # Environment mode
-```
+### Backend Server
 
-### Local Development with Redis
-
-For local development, you'll need a Redis server running. The easiest way is to use Docker:
-
-#### Quick Start with Docker
+Start the server using the CLI:
 
 ```bash
-# Start Redis in the background
-docker run -d --name redis-dev -p 6379:6379 redis:7-alpine
-
-# Verify Redis is running
-docker ps | grep redis-dev
-
-# Connect to Redis CLI (optional)
-docker exec -it redis-dev redis-cli ping
-# Should return: PONG
+npx broadcast-socket-server
 ```
 
-#### Stop Redis when done
+With custom options:
 
 ```bash
-# Stop Redis container
-docker stop redis-dev
-
-# Remove Redis container (optional)
-docker rm redis-dev
+npx broadcast-socket-server --port 12000 --cors-origin http://localhost:5173
 ```
 
-#### Using Docker Compose (Recommended)
+CLI Options:
 
-The project includes a `docker-compose.yml` file that sets up both the application and Redis:
+-   `-p, --port <number>`: Port to run the server on (default: 12000)
+-   `-c, --cors-origin <string>`: CORS origin (default: http://localhost:5173)
+
+### Frontend Library
+
+The `@broadcast-socket/frontend` package exports a React hook for easy WebSocket integration.
+
+Install in your React project:
 
 ```bash
-# Start both Redis and the application
-docker-compose up
-
-# Start only Redis for development
-docker-compose up redis
-
-# Run in background
-docker-compose up -d redis
+npm install @broadcast-socket/frontend
 ```
 
-#### Alternative: Install Redis Locally
-
-If you prefer to install Redis directly:
-
-**macOS (using Homebrew):**
-```bash
-brew install redis
-brew services start redis
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update
-sudo apt install redis-server
-sudo systemctl start redis-server
-```
-
-**Windows:**
-```bash
-# Using WSL2 with Ubuntu
-sudo apt install redis-server
-sudo service redis-server start
-```
-
-### Running the Server
-
-```bash
-# Development mode
-npm run dev
-
-# Production mode
-npm run build
-npm start
-
-# With Docker
-docker build -t broadcast-socket .
-docker run -p 8080:8080 broadcast-socket
-
-# With Docker Compose (includes Redis)
-docker-compose up
-```
-
-## React SDK Usage
-
-### Installation
-
-```bash
-# Install from GitHub repository
-npm install dnewmon/broadcast-socket
-```
-
-### Basic Setup
+Use in your React components:
 
 ```typescript
-import React from 'react';
-import { BroadcastSocketProvider } from 'broadcast-socket/sdk';
+import { useBroadcastSocket } from "@broadcast-socket/frontend";
 
-function App() {
-  return (
-    <BroadcastSocketProvider url="ws://localhost:8080">
-      <YourComponent />
-    </BroadcastSocketProvider>
-  );
-}
-```
+function MyComponent() {
+    const { messages, isConnected, sendMessage, connect, disconnect } = useBroadcastSocket();
 
-### Using Hooks
-
-```typescript
-import { useBroadcastSocket, useSubscription, useBroadcast } from 'broadcast-socket/sdk';
-
-function ChatComponent() {
-  // Main connection hook
-  const { state } = useBroadcastSocket('ws://localhost:8080');
-  
-  // Subscribe to a channel
-  const { state: subState, messages, subscribe, addMessageListener } = useSubscription('chat-room');
-  
-  // Broadcasting capabilities
-  const { broadcast } = useBroadcast();
-  
-  // Subscribe to the channel
-  useEffect(() => {
-    subscribe();
-  }, [subscribe]);
-  
-  // Listen for incoming messages with custom handler
-  useEffect(() => {
-    const removeListener = addMessageListener((message) => {
-      console.log('New message received:', message.data);
-      // Custom message handling logic here
-    });
-    
-    return removeListener; // Cleanup listener on unmount
-  }, [addMessageListener]);
-  
-  const sendMessage = () => {
-    broadcast('chat-room', { text: 'Hello World!' });
-  };
-  
-  return (
-    <div>
-      <div>Status: {state.connected ? 'Connected' : 'Disconnected'}</div>
-      <div>Subscribed: {subState.subscribed ? 'Yes' : 'No'}</div>
-      <div>Messages: {messages.length}</div>
-      <button onClick={sendMessage}>Send Message</button>
-    </div>
-  );
-}
-```
-
-### useSubscription Hook API
-
-The `useSubscription` hook provides channel-specific subscription management with message handling capabilities.
-
-#### Basic Usage
-
-```typescript
-import { useSubscription } from 'broadcast-socket/sdk';
-
-function ChannelComponent() {
-  const { 
-    state, 
-    messages, 
-    subscribe, 
-    unsubscribe, 
-    clearMessages, 
-    addMessageListener 
-  } = useSubscription('my-channel');
-  
-  // Automatically subscribe when component mounts
-  useEffect(() => {
-    subscribe();
-    return () => unsubscribe(); // Clean up on unmount
-  }, [subscribe, unsubscribe]);
-  
-  return (
-    <div>
-      <div>Channel: {state.channel}</div>
-      <div>Subscribed: {state.subscribed ? 'Yes' : 'No'}</div>
-      <div>Message Count: {state.messageCount}</div>
-      <div>Recent Messages: {messages.length}</div>
-    </div>
-  );
-}
-```
-
-#### Return Values
-
-- **`state`**: Subscription state object containing:
-  - `channel` - The channel name
-  - `subscribed` - Whether actively subscribed
-  - `subscribing` - Whether subscription is in progress
-  - `error` - Any subscription error message
-  - `messageCount` - Total messages received
-  - `lastMessage` - Timestamp of last message
-  
-- **`messages`**: Array of recent messages (last 100)
-- **`subscribe()`**: Function to subscribe to the channel
-- **`unsubscribe()`**: Function to unsubscribe from channel
-- **`clearMessages()`**: Function to clear message history
-- **`addMessageListener(callback)`**: Function to add custom message handlers
-
-#### Custom Message Handling
-
-```typescript
-function CustomHandlerComponent() {
-  const { addMessageListener, subscribe } = useSubscription('notifications');
-  
-  useEffect(() => {
-    subscribe();
-  }, [subscribe]);
-  
-  // Add custom message listener
-  useEffect(() => {
-    const removeListener = addMessageListener((message) => {
-      // Handle different message types
-      if (message.data?.type === 'alert') {
-        showNotification(message.data.text);
-      } else if (message.data?.type === 'update') {
-        updateUI(message.data.payload);
-      }
-    });
-    
-    // Clean up listener when component unmounts
-    return removeListener;
-  }, [addMessageListener]);
-  
-  return <div>Listening for notifications...</div>;
-}
-```
-
-#### Multiple Subscriptions
-
-```typescript
-function MultiChannelComponent() {
-  const chatSub = useSubscription('chat');
-  const alertSub = useSubscription('alerts');
-  const userSub = useSubscription('user-updates');
-  
-  useEffect(() => {
-    // Subscribe to all channels
-    chatSub.subscribe();
-    alertSub.subscribe();
-    userSub.subscribe();
-  }, []);
-  
-  // Different handlers for each channel
-  useEffect(() => {
-    const removeChatListener = chatSub.addMessageListener((msg) => {
-      console.log('Chat message:', msg.data);
-    });
-    
-    const removeAlertListener = alertSub.addMessageListener((msg) => {
-      showAlert(msg.data);
-    });
-    
-    return () => {
-      removeChatListener();
-      removeAlertListener();
+    const handleConnect = () => {
+        connect("http://localhost:12000", "my-channel");
     };
-  }, [chatSub.addMessageListener, alertSub.addMessageListener]);
-  
-  return (
-    <div>
-      <div>Chat Messages: {chatSub.messages.length}</div>
-      <div>Alerts: {alertSub.messages.length}</div>
-      <div>User Updates: {userSub.messages.length}</div>
-    </div>
-  );
+
+    const handleSend = () => {
+        sendMessage({ text: "Hello!" });
+    };
+
+    return (
+        <div>
+            <button onClick={handleConnect}>{isConnected ? "Disconnect" : "Connect"}</button>
+            <button onClick={handleSend} disabled={!isConnected}>
+                Send Message
+            </button>
+            <div>
+                {messages.map((msg, i) => (
+                    <div key={i}>{JSON.stringify(msg.data)}</div>
+                ))}
+            </div>
+        </div>
+    );
 }
 ```
 
-### Advanced Configuration
+### Example App
 
-```typescript
-const options = {
-  reconnect: true,              // Enable automatic reconnection
-  reconnectInterval: 1000,      // Initial reconnect delay (ms)
-  reconnectAttempts: 5,         // Maximum reconnection attempts
-  heartbeatInterval: 30000,     // Heartbeat interval (ms)
-  messageQueueSize: 100,        // Maximum queued messages
-  debug: false,                 // Enable debug logging
-};
-
-<BroadcastSocketProvider url="ws://localhost:8080" options={options}>
-  <App />
-</BroadcastSocketProvider>
-```
-
-## Docker Container
-
-### Building the Container
+Run the example application:
 
 ```bash
-# Build production image
-docker build -t broadcast-socket .
-
-# Build with custom tag
-docker build -t broadcast-socket:v1.0.0 .
+npm run dev:example
 ```
 
-### Running the Container
+Or from the example directory:
 
 ```bash
-# Basic run
-docker run -p 8080:8080 broadcast-socket
-
-# With environment variables
-docker run -p 8080:8080 \
-  -e REDIS_URL=redis://redis:6379 \
-  -e CORS_ORIGIN=https://yourdomain.com \
-  broadcast-socket
-
-# With Redis using Docker Compose
-docker-compose up
+cd packages/frontend/example
+npm run dev
 ```
 
-### Docker Compose Setup
+The example app will be available at `http://localhost:5173`
 
-```yaml
-version: '3.8'
-services:
-  broadcast-socket:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - CORS_ORIGIN=*
-    depends_on:
-      - redis
-    
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+## API
+
+### React Hook: `useBroadcastSocket()`
+
+Returns an object with:
+
+-   **`messages`**: `BroadcastMessage[]` - Array of received messages
+-   **`isConnected`**: `boolean` - Connection status
+-   **`connect(serverUrl: string, channel: string)`**: Function to connect to a server and channel
+-   **`disconnect()`**: Function to disconnect
+-   **`sendMessage(data: any)`**: Function to send a message to the current channel
+
+### WebSocket Connection (Direct)
+
+Connect to a channel by specifying it in the query parameters:
+
+```javascript
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:12000", {
+    query: { channel: "home" },
+});
 ```
 
-## Development Commands
+### REST Endpoint
+
+Send messages to a channel via HTTP:
 
 ```bash
-npm run dev          # Start development server with hot reload
-npm run build        # Build TypeScript to JavaScript
-npm run test         # Run test suite
-npm run lint         # Run ESLint code linting
-npm run typecheck    # Run TypeScript type checking
-npm start           # Start production server
+curl -X POST "http://localhost:12000/proxy?channel=home" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello from proxy!"}'
 ```
 
-## API Reference
+### Health Check
 
-### WebSocket Message Format
+```bash
+curl http://localhost:12000/health
+```
+
+## Architecture
+
+### Backend (`packages/backend`)
+
+-   **Express server** with Socket.IO integration
+-   **Channel-based rooms**: Clients join rooms based on the `channel` query parameter
+-   **Message broadcasting**: Messages are broadcast to all clients in the same channel
+-   **REST proxy endpoint**: POST requests to `/proxy?channel=<name>` send messages to that channel
+-   **CORS support**: Configurable CORS origin for security
+
+### Frontend Library (`packages/frontend`)
+
+-   **Installable npm package** exporting React hooks
+-   **`useBroadcastSocket` hook**: Manages WebSocket connection lifecycle
+-   **TypeScript types**: Fully typed for excellent developer experience
+-   **Peer dependency on React**: Works with React 18+
+
+### Example App (`packages/frontend/example`)
+
+-   **React application** demonstrating the library usage
+-   **Channel selector**: Choose which channel to connect to
+-   **Message display**: Real-time message feed with sender identification
+-   **Connection status**: Visual indicator of connection state
+
+## Message Format
+
+Messages follow this structure:
 
 ```typescript
-// Client to Server
-interface ClientMessage {
-  type: 'subscribe' | 'unsubscribe' | 'broadcast';
-  channel?: string;
-  data?: any;
-  messageId?: string;
-}
-
-// Server to Client
-interface ServerMessage {
-  type: 'message' | 'ack' | 'error' | 'ping';
-  channel?: string;
-  data?: any;
-  messageId?: string;
-  timestamp: number;
+interface BroadcastMessage {
+    data: any; // Your message payload
+    timestamp: number; // Unix timestamp
+    sender?: string; // Socket ID, 'system', or 'proxy'
 }
 ```
 
-### React SDK Types
+## Development
 
-```typescript
-interface BroadcastSocketOptions {
-  reconnect?: boolean;
-  reconnectAttempts?: number;
-  reconnectInterval?: number;
-  heartbeatInterval?: number;
-  messageQueueSize?: number;
-  debug?: boolean;
-}
+### Project Structure
 
-interface BroadcastSocketState {
-  connected: boolean;
-  connecting: boolean;
-  error: string | null;
-  reconnectAttempt: number;
-  lastConnected: number | null;
-}
+```
+broadcast-socket/
+├── package.json (monorepo root)
+├── packages/
+│   ├── backend/
+│   │   ├── src/
+│   │   │   ├── index.ts (CLI entry)
+│   │   │   ├── server.ts (Express + Socket.IO)
+│   │   │   └── types.ts
+│   │   └── bin/cli.js
+│   └── frontend/
+│       ├── src/
+│       │   ├── index.ts (library exports)
+│       │   └── hooks/
+│       │       └── useBroadcastSocket.ts (useBroadcastSocket hook)
+│       └── example/
+│           ├── src/
+│           │   ├── App.tsx
+│           │   └── main.tsx
+│           └── index.html
+└── README.md
 ```
 
-## Limitations
+### Running in Development
 
-### Technical Limitations
-- **Memory Usage**: Connection state stored in memory; high connection counts require adequate RAM
-- **Redis Dependency**: Requires Redis for horizontal scaling and message persistence
-- **Single Region**: No built-in multi-region support; requires external load balancing
-- **Message Size**: WebSocket message size limited by Node.js buffer limits (~1GB theoretical)
+Terminal 1 - Backend:
 
-### Scaling Limitations
-- **Sticky Sessions**: Load balancers may need sticky session support for optimal performance
-- **Redis Bottleneck**: Redis becomes bottleneck at very high message throughput
-- **File Descriptors**: Limited by OS file descriptor limits (ulimit)
+```bash
+npm run dev:backend
+```
 
-### Feature Limitations
-- **No Authentication**: No built-in authentication; implement at application level
-- **No Message Ordering**: No guaranteed message ordering across channels
-- **No Persistence**: Messages not persisted beyond Redis memory (configure Redis persistence as needed)
-- **No Binary Messages**: Optimized for JSON messages; binary support available but not optimized
+Terminal 2 - Frontend Library (watch mode):
 
-### Browser Limitations
-- **WebSocket Limits**: Browser WebSocket connection limits (typically 255 per domain)
-- **CORS Restrictions**: Subject to browser CORS policies
-- **Memory Usage**: Large message histories stored in browser memory
+```bash
+npm run dev:frontend
+```
 
-## Performance Considerations
+Terminal 3 - Example App:
 
-- **Concurrent Connections**: ~10,000 connections per process on modern hardware
-- **Message Throughput**: ~50,000 messages/second with Redis clustering
-- **Memory Usage**: ~1KB per connection + message buffers
-- **Latency**: <10ms message delivery in local network environments
+```bash
+npm run dev:example
+```
+
+## Example Use Case
+
+1. Start the backend server on port 12000
+2. Open multiple browser tabs with the example app
+3. Connect all tabs to the same channel (e.g., "home")
+4. Send messages from any tab - they'll appear in all tabs
+5. Use the proxy endpoint to send messages from external services:
+    ```bash
+    curl -X POST "http://localhost:12000/proxy?channel=home" \
+      -H "Content-Type: application/json" \
+      -d '{"notification": "New user joined!"}'
+    ```
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT

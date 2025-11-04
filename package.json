@@ -1,63 +1,24 @@
 {
-  "name": "broadcast-socket",
-  "version": "1.0.0",
-  "description": "A horizontally scalable WebSocket broadcasting service",
-  "main": "dist/server.js",
-  "type": "module",
-  "bin": {
-    "broadcast-socket": "bin/broadcast-socket"
-  },
-  "scripts": {
-    "dev": "./scripts/dev.sh",
-    "build": "npm run build:server && npm run build:sdk",
-    "build:server": "tsc",
-    "build:sdk": "tsc -p tsconfig.sdk.json",
-    "start": "node dist/server.js",
-    "test": "jest",
-    "lint": "npm run lint:src && npm run lint:sdk",
-    "lint:src": "eslint src/**/*.ts",
-    "lint:sdk": "eslint sdk-src/**/*.ts",
-    "typecheck": "npm run typecheck:src && npm run typecheck:sdk",
-    "typecheck:src": "tsc --noEmit",
-    "typecheck:sdk": "tsc --noEmit -p tsconfig.sdk.json"
-  },
-  "keywords": [
-    "websocket",
-    "broadcasting",
-    "scalable",
-    "redis",
-    "nodejs"
-  ],
-  "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "redis": "^5.8.2",
-    "uuid": "^11.1.0",
-    "ws": "^8.14.2"
-  },
-  "devDependencies": {
-    "@testing-library/react": "^16.3.0",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/jest": "^29.5.5",
-    "@types/node": "^24.3.0",
-    "@types/react": "^19.1.7",
-    "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.5.5",
-    "@typescript-eslint/eslint-plugin": "^8.40.0",
-    "@typescript-eslint/parser": "^8.40.0",
-    "eslint": "^9.28.0",
-    "jest": "^30.0.0",
-    "jest-environment-jsdom": "^30.0.5",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "ts-jest": "^29.4.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.2.2"
-  },
-  "engines": {
-    "node": ">=22.0.0"
-  }
+    "name": "broadcast-socket",
+    "version": "1.0.0",
+    "description": "A broadcast websocket server system with channel support",
+    "private": true,
+    "workspaces": [
+        "packages/*",
+        "packages/frontend/example"
+    ],
+    "scripts": {
+        "build": "npm run build --workspaces --if-present",
+        "dev:backend": "npm run dev -w @broadcast-socket/backend",
+        "dev:frontend": "npm run dev -w @broadcast-socket/frontend",
+        "dev:example": "npm run dev -w @broadcast-socket/example"
+    },
+    "keywords": [
+        "websocket",
+        "socket.io",
+        "react",
+        "typescript"
+    ],
+    "author": "David Newmon",
+    "license": "MIT"
 }
