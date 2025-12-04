@@ -7,6 +7,9 @@
         "packages/*",
         "packages/frontend/example"
     ],
+    "bin": {
+        "broadcast-socket-server": "./packages/backend/bin/cli.js"
+    },
     "scripts": {
         "build": "npm run build --workspaces --if-present",
         "dev:backend": "npm run dev -w @broadcast-socket/backend",
